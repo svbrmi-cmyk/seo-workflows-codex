@@ -6,22 +6,33 @@ irrelevant; never manufacture content to fill it.
 ## Research metadata
 
 - Brand:
-- Supplied store category URL:
+- Supplied store brand/category URL:
 - Store/market:
 - Category and filters:
 - Research date:
 - Access mode by key source:
 - Scope limitations:
-- Product deduplication rule:
+- Search route and fallback triggers:
+- Representative-product selection rule:
 
-## Store assortment map
+## Store category map
 
-| Product | SKU/model | Series | Subtype/variant | Price/availability | Store URL | Evidence |
-|---|---|---|---|---|---|---|
+| Product category/subtype | Displayed count | Share of assortment | Representative series/configurations | Observed price range | Category URL | Evidence |
+|---|---:|---:|---|---|---|---|
 
-Displayed store count:  
-Enumerated unique count:  
-Difference and explanation:
+Displayed total product count:  
+Sum of category counts:  
+Categories/subtypes mapped:  
+Representative products checked:  
+Overlap, lazy-loading and coverage explanation:
+
+## Representative product evidence
+
+Use only enough examples to substantiate category breadth, features and price. Do not
+reproduce the full product catalog unless the user explicitly requests it.
+
+| Category | Representative SKU/model | Why selected | Price/availability | Store URL | Evidence |
+|---|---|---|---|---|---|
 
 ## Source map
 
@@ -45,17 +56,17 @@ For every contradiction:
 >
 > Safe replacement: “...”
 
-## Product features and buyer value
+## Category features and buyer value
 
-| Series/model in store | Verified technical detail | Practical consequence | Buyer scenario | Inference? | Limitations | Source |
-|---|---|---|---|---|---|---|
+| Category/subtype | Verified category-level detail | Representative evidence | Practical consequence | Buyer scenario | Inference? | Limitations | Source |
+|---|---|---|---|---|---|---|---|
 
 ## Differentiation against comparable alternatives
 
 Define market, price segment, product configuration and comparison date.
 
-| Candidate feature | Brand models | Competitors checked | Found in N/M | Classification | Evidence |
-|---|---|---|---|---|---|
+| Category | Candidate feature | Brand evidence | Competing brands/categories checked | Found in N/M | Classification | Evidence |
+|---|---|---|---|---|---|---|
 
 Classifications: strong candidate differentiator / uncommon / industry standard /
 uniqueness not established.
@@ -77,9 +88,11 @@ Do not write “exclusive” merely because a feature was not found in this samp
 
 ## Contradictions and material discrepancies
 
-- Catalog count differences above 3%:
+- Total/category count differences and overlaps:
 - Conflicting origin/date/specification claims:
 - Old versus current product versions:
+- Perplexity claims contradicted by direct access:
+- Fallback search trigger and added sources:
 
 ## Searched and found nothing
 
@@ -95,8 +108,7 @@ null search into “confirmed absent.”
 
 ## Concise ready-to-use brand summary
 
-Write only after the evidence tables are complete. Include the strongest verified
-features, the models/series to which they apply, practical buyer value, and honest
-qualification where uniqueness is not established.
-
-
+Write only after the evidence tables are complete. Summarize the brand by product
+categories, category breadth, strongest verified category features, practical buyer
+value, and honest qualification where uniqueness is not established. Mention individual
+models only as representative examples.
