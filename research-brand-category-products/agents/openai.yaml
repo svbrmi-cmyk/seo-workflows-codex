@@ -1,0 +1,5 @@
+interface:
+  display_name: "Исследование бренда и категории"
+  short_description: "Точная проверка ассортимента и отличий бренда"
+  default_prompt: "Use $research-brand-category-products to research a brand and its products from the supplied store category URL without inventing facts."
+
