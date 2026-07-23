@@ -1,0 +1,4 @@
+interface:
+  display_name: "SEO-редактор по анализу"
+  short_description: "Редактирует текст по таблицам частотности"
+  default_prompt: "Use $edit-seo-text-by-analysis to edit this Russian text from the supplied frequency tables and word lists without changing its meaning."
