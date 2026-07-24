@@ -1,4 +1,4 @@
 interface:
   display_name: "LSI-насыщение по медиане"
   short_description: "Расширяет семантику текста по медиане XLSX"
-  default_prompt: "Use $edit-seo-text-by-analysis to rank relevant LSI groups by Медиана, count current word-form occurrences, pull the core toward the median without exceeding it, reduce non-priority repetition, ignore template noise, and preserve the text's meaning and readability."
+  default_prompt: "Use $edit-seo-text-by-analysis to rank relevant LSI groups by Медиана, execute negative Добавить/Удалить recommendations by exact word-form groups, pull the core toward the median without exceeding it, ignore template noise, and preserve meaning and readability."
