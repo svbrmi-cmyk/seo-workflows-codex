@@ -1,4 +1,4 @@
 interface:
-  display_name: "SEO-редактор по таблицам"
-  short_description: "Редактирует текст по минимумам и ширине"
-  default_prompt: "Use $edit-seo-text-by-analysis to edit the supplied Russian text using the analyzer columns Слово, Словоформа, Минимум по рекомендациям and Текст у вас, minimize exact irrelevant forms, and maximize natural coverage of relevant semantic-width words."
+  display_name: "LSI-насыщение по медиане"
+  short_description: "Расширяет семантику текста по медиане XLSX"
+  default_prompt: "Use $edit-seo-text-by-analysis to rank relevant LSI groups by Медиана, count current word-form occurrences, pull the core toward the median without exceeding it, reduce non-priority repetition, ignore template noise, and preserve the text's meaning and readability."
