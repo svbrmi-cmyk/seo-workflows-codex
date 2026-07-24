@@ -1,4 +1,4 @@
 interface:
   display_name: "Исследование бренда и категории"
-  short_description: "Точная проверка ассортимента и отличий бренда"
-  default_prompt: "Use $research-brand-category-products to research a brand by product categories from the supplied store brand or category URL without inventing facts. Use Perplexity first, verify important pages directly, and use controlled web-search fallback when Perplexity fails or contradicts direct access."
+  short_description: "Главный скилл исследования бренда и его изделий"
+  default_prompt: "Use $research-brand-category-products as the primary workflow to research a brand, its store product categories, category differences, features, advantages, and buyer value without inventing facts. Use Perplexity first, verify important pages directly, and use controlled web-search fallback when Perplexity fails, cannot access a page, provides incomplete category coverage, or contradicts direct evidence."
