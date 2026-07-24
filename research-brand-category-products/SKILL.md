@@ -1,300 +1,261 @@
 ---
 name: research-brand-category-products
-description: Primary/default skill for researching and fact-checking a brand and its products from a supplied brand name and an online-store brand or category URL. Use whenever Codex must collect buyer-useful brand information, map which product categories the brand actually sells in one store, measure category breadth, find category-level features and technologies, compare categories with same-segment alternatives, distinguish genuine differentiators from industry standards, translate verified details into buyer benefits, and produce a source-tagged report without turning the result into a product-by-product catalog.
+description: Research a brand from its name and a retailer brand/category URL and produce a clear Russian brand-and-product brief. Use when Codex must study what the retailer actually sells, how the brand officially positions itself, what product categories, collections, series and lines it makes, what the brand is known for in authoritative sources, how its category-level products differ from alternatives, and which verified features create practical buyer advantages—without turning the result into a SKU catalog or a compliance audit.
 ---
 
-# Research Brand Category Products
+# Research Brand, Categories and Product Lines
 
-Treat this as the primary skill for collecting information about a brand, its product
-categories, category differences, notable features, advantages and practical buyer
-value. Do not replace it with an improvised generic research workflow when the user
-asks for brand-and-product research.
+Use this as the primary workflow for brand-and-product research from:
 
-Use `scripts/perplexity_search.py` as the primary tool for online search, source
-discovery and fact-verification queries. The script calls the official Perplexity Sonar
-API, reads its credential only from `PERPLEXITY_API_KEY`, and returns structured JSON
-containing the answer and source records.
+- a brand name;
+- a retailer brand or category URL.
 
-Run it from this skill directory:
+The required result is a **clear brand brief**, not a product-card audit. Answer these
+questions directly:
+
+1. What does the retailer page show and sell under this brand?
+2. How does the brand officially present and position itself?
+3. What does the brand manufacture or offer by product category?
+4. Which collections, series and product lines organize the range?
+5. What is the brand known for according to credible independent or specialist sources?
+6. How do its product categories differ from comparable brands?
+7. Which verified features and technologies create practical buyer advantages?
+
+Research categories, collections, series and lines. Use individual products only as
+examples that prove a broader finding. Do not organize the report around SKUs.
+
+## Research tools and source order
+
+Use `scripts/perplexity_search.py` as the primary discovery tool after opening the
+user-supplied retailer URL directly:
 
 ```text
 python scripts/perplexity_search.py "precise research or verification query"
 ```
 
-Never treat a Perplexity conclusion about page access, page contents, absence of
-documents or absence of products as final without a direct check.
+The script reads `PERPLEXITY_API_KEY` and returns JSON with an answer and source URLs.
+Treat its answer as discovery, not proof.
 
-Use this retrieval sequence:
+Use this sequence:
 
-1. Open the user-supplied URL directly before asking Perplexity to describe it.
-2. Use Perplexity to discover official, retailer, competitor and registry sources.
-3. Open relevant returned URLs directly and read them before labeling evidence
-   `[direct]` or `[document]`.
-4. If Perplexity returns an API error, no useful sources, an inaccessible-page claim,
-   incomplete category coverage, or a conclusion contradicted by direct reading, use a
-   general-purpose web search as a controlled fallback.
-5. Record why fallback search was triggered and which source URLs it added. Verify
-   fallback results directly under the same evidence rules.
+1. Open and study the supplied retailer page directly.
+2. Identify the brand's official site and open it directly.
+3. Use Perplexity to discover official documents, interviews, trade publications,
+   reputable specialist sources and category competitors.
+4. Open important discovered pages directly before relying on them.
+5. Use general web search as fallback when:
+   - the retailer or official page cannot be read;
+   - Perplexity misses categories or collections;
+   - Perplexity returns an irrelevant namesake;
+   - direct evidence contradicts the discovery answer;
+   - authoritative independent coverage remains incomplete.
+6. Record important access limitations and contradictions, but do not let retrieval
+   diagnostics dominate the final brief.
 
-Do not use remembered knowledge as fallback evidence. If `PERPLEXITY_API_KEY` is
-missing, Python cannot run, or both Perplexity and fallback search are unavailable,
-stop the affected online research and report the exact blocker. Never silently switch
-providers or conceal a disagreement between Perplexity and directly read evidence.
+Never silently replace Sancos with Sanaks, or another brand with a similar name.
+Validate the domain, logo/name, product type and article conventions before accepting a
+source.
 
-Treat Perplexity and fallback search results as discovery records, not factual proof.
-If a returned page cannot be opened, keep its evidence label `[snippet]` and do not
-imply that its full contents were verified.
+If `PERPLEXITY_API_KEY` is absent or the script cannot run, report the blocker. Do not
+claim that Perplexity was used when it was not.
 
-Accept two required inputs:
+## Evidence hierarchy
 
-- brand name;
-- online-store brand or category URL.
+Prefer sources in this order:
 
-Treat the store page as the boundary of the assortment under study. The primary unit of
-analysis is a **product category or subtype**, not an individual SKU. Use individual
-products only as representative evidence for a category-level claim, price range or
-technical example. Do not turn the report into a complete product catalog unless the
-user explicitly requests SKU-level enumeration.
+1. official brand/manufacturer site, catalogs, manuals and certificates;
+2. supplied retailer page and its category pages;
+3. official regional distributor;
+4. established trade media, professional publications, exhibition or award sites,
+   certification databases and credible business sources;
+5. established specialist retailers for assortment and local availability;
+6. review datasets and installer sources for repeated experience patterns.
 
-Produce the most complete category-level report the available evidence supports. Never
-fill a gap with memory, inference presented as fact, or an industry-typical
-characteristic.
+Use evidence labels internally:
 
-Read [references/report-template.md](references/report-template.md) before drafting the
-final result.
-
-## 1. Establish scope and access
-
-Open the supplied store URL directly and identify:
-
-- store and market/region;
-- category and any active filters;
-- whether the page is brand-filtered;
-- access date;
-- displayed total product count;
-- product-category tabs, filters, subcategories and their displayed counts;
-- whether category navigation, lazy loading and representative product cards are
-  readable directly.
-
-If Perplexity says that the supplied page is unavailable or empty but direct access
-succeeds, classify the Perplexity access claim as contradicted and continue from the
-direct page. If direct access fails, trigger fallback search for the exact URL, domain,
-brand and visible indexed category pages.
-
-Check access separately for the store, official manufacturer, official regional
-representative and other important sources.
-
-Label evidence:
-
-- `[direct]` — the page itself was opened and read;
-- `[document]` — an official catalog, certificate or manual was read;
+- `[direct]` — page opened and read;
+- `[document]` — catalog, manual, certificate or data sheet read;
 - `[snippet]` — only a search-result snippet was available;
-- `[user-supplied]` — supplied by the user and not yet independently verified.
+- `[inference]` — cautious consequence derived from verified facts.
 
-State access limitations before findings. Do not silently treat snippets as direct
-evidence.
+Do not treat repeated retailer copy as independent confirmation. Do not use generic SEO
+articles to establish what a brand is famous for.
 
-## 2. Map product categories in the store
+## Phase 1: Understand the retailer page
 
-Map only the named brand's categories and subtypes present within the supplied store
-scope. Handle category tabs, filters, pagination, lazy loading and variant-heavy
-listings.
+Study the supplied page as the local assortment boundary. Capture:
 
-Record for every category or subtype:
+- how the retailer describes the brand;
+- which product categories and subcategories are present;
+- visible collections or series;
+- the relative emphasis of the assortment;
+- meaningful configuration breadth: sizes, mounting types, finishes or use cases;
+- price positioning when it is clearly observable;
+- notable gaps between the retailer and official brand range.
 
-- exact store label;
-- displayed product count and share of the brand assortment when available;
-- representative series or collections;
-- representative product types or configurations;
-- observed price range and availability pattern;
-- category/filter URL when available;
-- two to five representative SKU examples only when they help substantiate category
-  breadth, features or price.
+Count products or category shares only when the page exposes reliable counts and the
+numbers help explain the assortment. Do not make reconciliation tables the center of
+the report.
 
-Do not enumerate every product by default. Use enough representative products to
-validate the category findings. Deduplicate representative examples by SKU/article
-first, then canonical URL, then exact model identity.
+Do not enumerate all products. Check enough representative cards to understand each
+category and verify recurring features.
 
-Report:
+## Phase 2: Study the official brand
 
-- the store's displayed total product count;
-- the sum of displayed category counts;
-- whether categories overlap;
-- the number of categories and subtypes independently mapped;
-- the number of representative products checked.
+On the official brand or manufacturer site, determine:
 
-If category counts do not reconcile with the total, determine whether tabs overlap,
-variants are counted separately, or lazy loading hides categories. Treat a large gap
-between total products and visible cards as a coverage limitation, not automatically
-as catalog inconsistency.
+- the brand's own positioning and target customer;
+- the promised design, engineering, price or service level;
+- brand history, geography and company identity when verifiable;
+- the complete category architecture;
+- collection, series and line structure;
+- named technologies, materials, mechanisms, component suppliers and design concepts;
+- warranties, service and documentation by category;
+- whether the brand offers coordinated cross-category solutions.
 
-Use the category map to define research priorities: cover every category found and
-investigate the most represented or technically diverse categories first. Never
-research unrelated brand categories unless needed for context and clearly marked out
-of scope.
+Separate:
 
-## 3. Build the source map
+- **official positioning** — how the brand describes itself;
+- **verified fact** — what primary evidence establishes;
+- **unsupported marketing language** — claims without technical or independent support.
 
-Find and distinguish:
+Do not infer manufacturing country from an Italian collection name, design style,
+distributor address or retailer's “country of brand” field. If origin is unclear, say
+so briefly.
 
-1. official manufacturer site;
-2. official site for the relevant country or regional representative;
-3. official catalogs, manuals, certificates and product data sheets;
-4. the supplied store's brand, category and representative product pages;
-5. two or more established specialist retailers carrying the same categories;
-6. same-category competitor sources needed to test differentiation;
-7. registries, installer sources and review datasets when relevant.
+## Phase 3: Determine what the brand is known for
 
-Use the official source for brand history, production geography, named technologies,
-series architecture and certifications. Use store and retailer cards to confirm what is
-actually sold locally, not to establish unsupported corporate claims.
+Search beyond the official site. Prioritize:
 
-Before treating sources as independent confirmations, compare their wording. Identical
-or near-identical descriptions copied from one supplier feed count as one evidence
-chain. Record the likely common origin.
+- established industry media;
+- professional architecture and design publications;
+- major exhibitions and award databases;
+- credible company profiles and interviews;
+- certification and registry records;
+- established specialist retailers with original editorial content;
+- sufficiently large, deduplicated review datasets when reputation or defects matter.
 
-Prefer official category, collection, technology and document pages for category-level
-claims. Use exact product/model pages only to prove representative examples. Record
-publication/update date when available and always record access date.
+Look for evidence of:
 
-## 4. Atomize and verify claims
+- recognizable design language or signature collections;
+- category specialization;
+- patented or named engineering;
+- notable collaborations, awards or exhibition presence;
+- reputation among designers, installers or buyers;
+- long-running strengths or recurring weaknesses.
 
-Convert every candidate statement into one atomic, checkable claim. Separate combined
-sentences into:
+If authoritative independent coverage is sparse, state:
 
-- identity claims: brand, manufacturer, legal entity;
-- dates and geography;
-- product-category, subtype, series and representative SKU names;
-- materials and component brands;
-- mechanisms and named technologies;
-- numeric specifications, tolerances and test cycles;
-- standards, certificates and protection classes;
-- warranty and service terms;
-- catalog and assortment counts.
+> The brand is visible in retail and distributor sources, but broad independent
+> recognition was not established in the checked scope.
 
-For every claim, capture the exact supporting passage or table value, source URL,
-evidence label and access date. Preserve units and conditions. Do not generalize a
-model-specific feature to the whole brand or series without explicit evidence.
+Never substitute advertising repetition for fame.
 
-Classify each claim exactly as:
+## Phase 4: Analyze categories, collections and lines
 
-- **confirmed**;
-- **contradicted**;
-- **unverifiable from available evidence**.
+Organize the core research by product category. For every relevant category explain:
 
-For contradictions, show both statements and offer a safe replacement formulation.
-When sources conflict, prefer the more primary, model-specific and recent source, but
-report the conflict rather than silently choosing.
+- what the brand offers;
+- the main collections, series or lines;
+- how those lines differ from one another;
+- recurring materials, mechanisms, formats and finishes;
+- category-wide features versus model-specific options;
+- installation, compatibility or care constraints;
+- the supported buyer benefit.
 
-Verify geographic and legal names independently. Do not infer manufacturing country
-from brand registration, design origin, distributor address or marketing language.
+Use this reasoning chain:
 
-## 5. Find meaningful product features
+`verified feature → practical consequence → buyer scenario → limitation`
 
-For each product category and important subtype present in the store assortment, search
-for concrete, buyer-relevant details such as:
+Example:
 
-- exact material grade or thickness;
-- coating process and layer information;
-- named cartridge, aerator, valve, fitting or mechanism manufacturer;
-- closer, hinge, roller or flush mechanism design;
-- pressure, flow, load, cycle, temperature or protection ratings;
-- installation, maintenance and compatibility constraints;
-- category-wide or clearly scoped warranty and certification;
-- representative model evidence that illustrates, but does not automatically define,
-  the whole category.
+`thermostat with 38 °C safety stop → reduces accidental temperature changes
+→ useful for a family bathroom → still depends on correct pressure and installation`
 
-Reject unsupported phrases such as “premium quality,” “European standard,” “reliable”
-or “innovative.” A useful differentiator must contain a named mechanism, measurable
-property, verified design choice or clearly documented service condition.
+Mark consequences as `[inference]` when not stated directly.
 
-Deliberately search for series where no meaningful technical distinction appears.
-Report that null result instead of inventing an advantage.
+Do not generalize a feature from one model to a whole category unless:
 
-## 6. Translate detail into buyer value cautiously
+- the official category or collection page says it is shared; or
+- several representative products across the line confirm it.
 
-Use:
+## Phase 5: Find real differences and advantages
 
-`verified technical detail → supported practical consequence → relevant buyer scenario`
+Compare at the category or collection level, not as a random SKU-versus-SKU table.
 
-The practical consequence must follow from the documented mechanism or from a credible
-technical source. Mark a reasonable but not directly documented consequence as
-`[inference]` and explain the reasoning. Never turn it into a categorical promise.
+For each important category:
 
-Avoid exaggerated outcomes. For example, a material grade alone does not prove that a
-complete assembly will withstand a hydraulic shock; pressure-test data for the assembly
-would be needed.
+1. Define the comparable segment and buyer scenario.
+2. Select several credible same-segment alternatives.
+3. Compare the exact feature, line breadth, configuration choice, documentation,
+   service or price position.
+4. Classify the result:
+   - **real differentiator** — materially uncommon and well supported;
+   - **useful advantage** — buyer-relevant but available from multiple brands;
+   - **industry standard** — common and not a reason to prefer the brand alone;
+   - **not established** — evidence is insufficient.
 
-Include limitations and trade-offs when relevant: care requirements, installation
-conditions, consumable availability, compatibility or warranty exclusions.
+Do not force a fixed competitor denominator when it adds noise. Name the competitors
+and evidence basis clearly enough for the reader to understand the comparison.
 
-## 7. Test whether a category difference is actually distinctive
+An advantage may be a combination rather than an exclusive technology, for example:
 
-For each priority category, build a comparison set of 5–8 direct competing brands or
-category assortments:
+- unusually broad size coverage within one coherent furniture line;
+- coordinated finishes across mixers, showers and accessories;
+- clearer technical documentation than peers;
+- a useful combination of filter connection, flexible spout and multiple flow modes;
+- stronger local stock, warranty or service.
 
-- same category and important subtype;
-- comparable price segment in the relevant market;
-- similar range of configurations and installation types;
-- assortments currently available or documented in a comparable period.
+Do not call anything “unique,” “exclusive,” “best” or “premium” unless the evidence
+supports that exact conclusion.
 
-Define the compared feature precisely before counting. Check direct or official sources
-for each competitor and show the denominator:
+## Phase 6: Write the brief
 
-- feature found in 0–1 competitors: **strong candidate differentiator**;
-- feature found in a minority but more than one: **uncommon feature**;
-- feature found in at least half: **industry standard/common feature**;
-- insufficient comparable evidence: **uniqueness not established**.
+Read [references/report-template.md](references/report-template.md) before drafting.
 
-Do not call a feature exclusive unless exhaustive market evidence or an enforceable
-exclusive right supports that word. Prefer “not found among N checked competitors.”
+Write in Russian unless the user requests another language. Lead with conclusions.
+Keep sourcing visible but secondary to the narrative.
 
-Compare category coverage, feature availability, documented technology and price bands.
-Use individual products only as representative comparison points. Price differences
-above 15–20% from the comparison median may be reported as meaningful; state date,
-market and sample.
+The brief must contain:
 
-## 8. Use additional verification channels with discipline
+1. executive summary;
+2. what the retailer page shows;
+3. official brand profile and positioning;
+4. what the brand makes;
+5. category, collection and line analysis;
+6. what the brand is known for;
+7. differences from competitors;
+8. real features and buyer advantages;
+9. common features that are not differentiators;
+10. limitations, contradictions and open questions;
+11. concise ready-to-use brand brief.
 
-When a claim makes them relevant, check:
+Use compact tables only when they improve comparison. Do not include by default:
 
-- patent and certification registries;
-- accreditation, recall or certificate-withdrawal records;
-- installer/contractor discussions;
-- repeated marketplace defects;
-- reverse-image search for possible rebadging;
-- official versus parallel-import warranty status.
+- a full product catalog;
+- a long SKU evidence table;
+- a claim-by-claim audit register;
+- exhaustive source-retrieval logs;
+- arithmetic that does not improve the brand conclusion.
 
-“Searched and found nothing” is not proof of absence. Record queries, identifiers and
-scope. Require an exact legal entity, registration number, batch or certificate number
-when the registry needs it.
+## Quality gate
 
-Treat a defect pattern as a signal only after at least five plausibly independent,
-specific mentions for the same mechanism/model family. Deduplicate reposts and copied
-reviews. Reviews establish reported experience, not engineering causation.
+Before saving, verify:
 
-If a channel is unavailable, mark it `not attempted` or `inconclusive`.
+- the report answers all seven core questions at the top of this skill;
+- the retailer page and official site are both clearly represented;
+- the official positioning is not presented as independent fact;
+- “known for” is supported by authoritative external evidence or explicitly marked as
+  not established;
+- every store category in scope is covered at a useful level;
+- collections, series and lines are explained, not merely listed;
+- SKU evidence remains subordinate to category findings;
+- model-specific features are not generalized;
+- differences are separated into real differentiators, useful advantages and industry
+  standards;
+- buyer benefits follow from verified mechanisms;
+- origin, warranty and technical conflicts remain visible but concise;
+- the final section can be used as a practical brand brief without reading the research
+  process.
 
-## 9. Quality gate
-
-Before finalizing, verify:
-
-- every store product category in scope is represented or listed as unresolved;
-- the report is organized by categories rather than as a product-by-product catalog;
-- representative SKUs are not presented as the entire assortment;
-- every factual sentence has a source;
-- model-level evidence was not expanded to the brand;
-- model-level evidence was not expanded to a category without explicit support;
-- copied retailer descriptions were not counted independently;
-- all numbers retain units, conditions and dates;
-- competitor comparisons use a declared segment and denominator;
-- “unique,” “exclusive,” “best” and durability claims meet the evidence threshold;
-- technical details are translated into benefits without overstating causality;
-- contradictions and access limitations remain visible;
-- Perplexity access and absence claims were checked directly;
-- fallback search triggers and added sources are disclosed;
-- addresses distinguish manufacturer, representative, brand showroom and reseller;
-- no empty section is padded with generic marketing.
-
-If evidence is too weak, deliver a smaller accurate report and a concrete open-questions
-list rather than a complete-looking speculative one.
+Save the result under `D:\CODEX\outputs` unless the user specifies another destination.
