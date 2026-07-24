@@ -1,9 +1,14 @@
 ---
 name: research-brand-category-products
-description: Research and fact-check a brand's product categories using a supplied brand name and an online-store brand or category URL. Use when Codex must map which product categories the brand actually sells in one store, measure category breadth, find category-level features and technologies, compare categories with same-segment alternatives, distinguish genuine differentiators from industry standards, translate verified details into buyer benefits, and produce a source-tagged report without turning the result into a product-by-product catalog.
+description: Primary/default skill for researching and fact-checking a brand and its products from a supplied brand name and an online-store brand or category URL. Use whenever Codex must collect buyer-useful brand information, map which product categories the brand actually sells in one store, measure category breadth, find category-level features and technologies, compare categories with same-segment alternatives, distinguish genuine differentiators from industry standards, translate verified details into buyer benefits, and produce a source-tagged report without turning the result into a product-by-product catalog.
 ---
 
 # Research Brand Category Products
+
+Treat this as the primary skill for collecting information about a brand, its product
+categories, category differences, notable features, advantages and practical buyer
+value. Do not replace it with an improvised generic research workflow when the user
+asks for brand-and-product research.
 
 Use `scripts/perplexity_search.py` as the primary tool for online search, source
 discovery and fact-verification queries. The script calls the official Perplexity Sonar
@@ -293,4 +298,3 @@ Before finalizing, verify:
 
 If evidence is too weak, deliver a smaller accurate report and a concrete open-questions
 list rather than a complete-looking speculative one.
-
