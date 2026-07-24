@@ -1,72 +1,222 @@
 ---
 name: edit-seo-text-by-analysis
-description: Edit Russian SEO and commercial texts from an original text, XLSX word-frequency analysis, a semantic-width word list, and an irrelevant exact-word-form report. Use when Codex must preserve meaning and facts, improve style and technical wording, add or reduce word groups to targets or medians, keep flagged exact forms within limits, and deliver a validated edited text.
+description: Редактировать готовые русские SEO- и коммерческие тексты по исходному тексту, XLSX-таблицам анализатора, файлу нерелевантных точных словоформ и списку слов для семантической ширины. Использовать, когда нужно ориентироваться на столбцы «Слово», «Словоформа/Словоформы», «Минимум по рекомендациям» и «Текст у вас», сократить нерелевантные формы до минимума, максимально полно и естественно включить подходящие слова ширины, строго сохранить смысл и содержание, обеспечить читабельность и выдать проверенный отредактированный текст.
 ---
 
-# Edit SEO Text by Analysis
+# Редактирование SEO-текста по анализу
 
-## Workflow
+Дорабатывать только готовый текст. Не писать новый материал с нуля и не превращать
+редактирование в механическую расстановку ключей.
 
-1. Identify the source text and every analysis artifact supplied by the user.
-2. Read text files with their actual encoding. If console output is mojibake, fix output encoding or decode the bytes before interpreting words.
-3. Extract XLSX rows with `scripts/extract-xlsx-analysis.ps1` when a spreadsheet reader is unavailable.
-4. Build three separate requirement sets:
-   - grouped word counts and their targets;
-   - semantic-width words that may be added when relevant;
-   - exact irrelevant word forms and their maximum allowed occurrences.
-5. Edit the complete text, preserving its subject, facts, comparisons, structure, commercial intent, and conclusions.
-6. Improve grammar, rhythm, terminology, headings, transitions, punctuation, and technical precision.
-7. Validate the final text deterministically. Revise toward the requested limits only while every occurrence remains meaningful, accurate, grammatical, and natural.
-8. Save the result as a new UTF-8 text file unless the user explicitly asks to overwrite the source.
+Главный приоритет:
 
-## Interpret analysis tables
+`читабельность → неизменность смысла и содержания → естественность и логика
+формулировок → числовые рекомендации анализатора`.
 
-- Treat `Слово` as the word-group label and `Словоформы` as the exact members counted in that group.
-- For a median table, use `Повторы` as the current count and `Медиана` as the target. Use `Добавить/Удалить` as a cross-check.
-- For a range table, use `Минимум по рекомендациям` and `Максимум по рекомендациям`. If the user asks for the median, prefer the median table over the range.
-- A positive adjustment means add occurrences; a negative adjustment means remove occurrences.
-- Distinguish total-document recommendations from recommendations limited to text or anchor tags. Do not combine columns with different scopes.
-- Treat target frequencies and medians as diagnostic reference points, not as quotas that override meaning or language quality.
-- When tables conflict, follow the scope explicitly requested by the user and report a material unresolved conflict.
+Не менять факты, выводы, оценки, отношения между объектами и объём сообщаемой
+информации. Разрешены только языковая правка, устранение повторов и такое уточнение
+формулировки, которое не добавляет и не убирает смысл.
 
-## Edit safely
+## Обязательные входы
 
-- Preserve every substantive claim from the source unless correcting an evident language or terminology error.
-- Do not invent product properties, certifications, dimensions, warranty terms, prices, availability, or comparisons to satisfy keywords.
-- Insert every added word only where it accurately describes the subject of that sentence and logically develops the surrounding paragraph.
-- Distribute relevant terms across the text by topic: category terms in category sections, materials and finishes in material sections, and commercial terms in purchase sections.
-- Keep additions even across suitable sections when the text supports them. Do not cluster repeated exact forms in one sentence, adjacent sentences, headings, or lists merely to reach a target.
-- Make every inserted form agree grammatically with its phrase and fit the sentence's syntax, terminology, register, and factual scope.
-- Add semantic-width words only where the existing content supports them. Prefer category lists, navigation sentences, headings, and purchase-condition blocks.
-- Do not add all width words mechanically. Skip unrelated brand names, policy terms, interface labels, and product categories that the text does not support.
-- Replace excess repeated terms with accurate pronouns, hypernyms, or context-specific equivalents.
-- Avoid awkward keyword insertions, fragments, tautology, promotional clichés, and unsupported superlatives.
-- Accept a justified shortfall from a median when another occurrence would be repetitive, misleading, structurally misplaced, or unnatural. Record the reason briefly instead of forcing the word into the text.
-- Preserve qualifications such as `по данным производителя` for manufacturer-supplied performance claims.
-- Keep standards and technical terms precise. For example, describe IP ratings without implying protection beyond the stated class.
+Перед началом найти и прочитать:
 
-## Handle irrelevant words
+1. исходный текст;
+2. одну или несколько XLSX-таблиц анализатора;
+3. файл нерелевантных слов;
+4. файл слов для семантической ширины.
 
-- Treat the irrelevant-word report as exact-form matching, not stemming.
-- If the user specifies `не больше одного раза`, leave zero or one occurrence of each flagged exact form.
-- Do not remove a unique occurrence solely because it appears in the report when the allowed maximum is one and the sentence needs it.
+Если пользователь явно передал все четыре типа материалов, не переспрашивать. Если
+какого-либо типа действительно нет, назвать недостающий вход и продолжить только в
+пределах доступных данных.
 
-## Validate
+Текстовые файлы читать в их фактической кодировке. Если консоль показывает нечитаемые
+символы, сначала исправить декодирование, а не интерпретировать искажённый текст.
 
-- Count grouped terms from the exact word forms listed in the XLSX file, case-insensitively and at word boundaries.
-- Count irrelevant words by exact word form, also at word boundaries.
-- Check headings because analysis services commonly count them as part of the document.
-- Re-read the complete result without looking at the target table and assess it as ordinary prose. Rewrite or remove any occurrence that feels inserted for the analyzer, even if the count then falls below the median.
-- Check that repeated terms are separated naturally and appear only in sections where their meaning belongs.
-- Grammatical quality, logical flow, factual coherence, precision, and natural wording take priority over blindly forcing a target.
-- Report the saved file and briefly state which constraints were verified. Do not overwhelm the user with internal calculations unless requested.
+## 1. Разобрать таблицы анализатора
 
-## Helper script
-
-Run:
+Если обычный читатель XLSX недоступен, запустить:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/extract-xlsx-analysis.ps1 -Path analysis.xlsx
 ```
 
-The script prints all populated worksheet rows as tab-separated `cell=value` fields. Use it only for extraction; interpret column scope according to the rules above.
+На каждом листе сначала найти строку заголовков. Сопоставлять столбцы по тексту
+заголовка, а не по буквам A/B/C:
+
+- `Слово` — название группы;
+- `Словоформа` или `Словоформы` — формы, которые анализатор включает в группу;
+- `Минимум по рекомендациям` — целевой минимум;
+- `Текст у вас` — количество в исходном тексте по данным анализатора.
+
+Допустимы несущественные различия регистра, пробелов, переносов строк и уточнений в
+скобках. Не подменять эти столбцы похожими полями:
+
+- не использовать `Медиана` как цель;
+- не использовать `Максимум по рекомендациям` как цель;
+- не использовать частоту конкурентов, TF-IDF или BM25 вместо цели;
+- не складывать показатели всего документа, текста, анкоров и шаблона страницы.
+
+Для каждой строки сформировать:
+
+`группа → точные словоформы → минимум → текст у вас → первичный дефицит`
+
+где:
+
+`первичный дефицит = max(0, минимум − текст у вас)`.
+
+Разбирать перечисление словоформ по фактическому разделителю таблицы: запятая, точка с
+запятой, перенос строки или другое явно повторяющееся разделение. Не дробить
+многословную словоформу на отдельные слова.
+
+Если обязательный столбец не найден, не угадывать его. Сообщить точное имя листа и
+найденные заголовки.
+
+## 2. Пересчитать исходный текст
+
+Число `Текст у вас` использовать как исходный показатель анализатора, но перед
+редактированием самостоятельно пересчитать указанные словоформы:
+
+- без учёта регистра;
+- только на границах слов;
+- с учётом заголовков, списков и подписей, если они входят в переданный текст;
+- суммируя только словоформы одной группы.
+
+Если собственный счётчик отличается от `Текст у вас`, не скрывать расхождение.
+Ориентироваться на область текста, которую пользователь передал для редактирования, и
+в итоговой проверке показывать собственный фактический счётчик. Не добавлять слова
+вслепую по устаревшему значению таблицы.
+
+Составить рабочий список:
+
+- **добавить** — фактическое количество ниже `Минимум по рекомендациям`;
+- **достаточно** — минимум уже достигнут;
+- **не добавлять** — строка нерелевантна содержанию или относится к шаблону сайта;
+- **конфликт** — словоформа одновременно требуется таблицей и запрещена файлом
+  нерелевантных слов.
+
+## 3. Обработать нерелевантные слова
+
+Файл нерелевантных слов трактовать как перечень **точных словоформ**, если в нём явно
+не задан другой формат.
+
+Цель по умолчанию — **ноль употреблений каждой формы**. Сокращать их до возможного
+минимума:
+
+1. убрать лишний повтор;
+2. заменить точным синонимом, местоимением или гиперонимом;
+3. перестроить предложение без потери утверждения;
+4. оставить форму только тогда, когда удаление исказит факт, название, цитату или
+   обязательный термин.
+
+Не считать однокоренные слова совпадением с точной запрещённой формой. Не удалять
+смысловые факты ради нулевого счётчика.
+
+Если нерелевантная форма одновременно входит в обязательную группу анализатора,
+приоритет имеет файл нерелевантных слов: не наращивать эту форму, подобрать другую
+разрешённую словоформу той же группы. Если альтернативы нет, отметить конфликт.
+
+## 4. Закрыть минимумы анализатора
+
+Добавлять только те группы, для которых фактическое количество ниже
+`Минимум по рекомендациям`.
+
+- Стремиться достичь минимума, но не превышать его без языковой необходимости.
+- Выбирать из `Словоформа/Словоформы` форму, которая грамматически подходит фразе.
+- Распределять добавления по тематически подходящим абзацам.
+- Не ставить одинаковые формы рядом или несколько раз в одном предложении ради
+  счётчика.
+- Не добавлять свойства, бренды, сертификаты, размеры, цены, гарантии или сравнения,
+  которых нет в исходнике.
+- Не заменять точное утверждение более общим или более сильным только ради нужной
+  словоформы.
+- Вписывать каждое добавление логично по теме конкретного предложения и в правильном
+  лексическом значении.
+- Не переносить слова из футера, меню, юридических блоков и шаблона магазина в основной
+  текст только из-за рекомендации анализатора.
+
+Если достижение минимума делает текст искусственным или требует выдумать факт, оставить
+обоснованный недобор и указать причину.
+
+## 5. Максимально расширить семантическую ширину
+
+Главная цель файла ширины — использовать **максимальное количество разных подходящих
+слов**, а не многократно повторять несколько слов.
+
+Для каждого кандидата определить:
+
+- **подходит** — точно относится к теме и подтверждается содержанием исходника;
+- **подходит после естественного уточнения** — можно встроить без нового факта;
+- **не подходит** — чужая категория, бренд, услуга, свойство, интерфейсный или
+  юридический шум;
+- **уже есть** — повторно добавлять не требуется.
+
+Вставить по одному естественному употреблению каждого подходящего кандидата, выбирая
+нужную грамматическую форму. После первого прохода использовать дополнительные
+употребления только там, где они улучшают точность или одновременно закрывают минимум
+анализатора.
+
+Стремиться к максимальному покрытию списка:
+
+`покрытие = использованные подходящие кандидаты / все подходящие кандидаты`.
+
+Не считать пропуском слова, признанные нерелевантными. Не вставлять слово только ради
+процента, если оно создаёт новый неподтверждённый факт, тавтологию или неестественную
+фразу.
+
+## 6. Редактировать текст
+
+Выполнять правки в таком порядке:
+
+1. сохранить копию исходника;
+2. убрать или заменить нерелевантные точные формы;
+3. закрыть дефициты до `Минимум по рекомендациям`;
+4. добавить максимум подходящих слов ширины;
+5. отредактировать связность, грамматику, терминологию, заголовки и пунктуацию;
+6. перечитать весь текст как обычный читатель.
+
+Сохранять тему, все факты, содержание, структуру, сравнения, коммерческий интент и
+выводы исходника. Не сокращать полезное содержание и не добавлять новое. Полностью
+переписывать абзац только когда локальной правкой нельзя получить естественный
+результат, проверив после переписывания смысловое соответствие исходнику предложение
+за предложением.
+
+## 7. Обязательная финальная проверка
+
+После редактирования пересчитать:
+
+1. каждую группу анализатора по её словоформам;
+2. каждую нерелевантную точную форму;
+3. каждый подходящий кандидат ширины.
+
+Проверить:
+
+- для целевых групп: `стало >= Минимум по рекомендациям`, если это возможно без
+  искажения текста;
+- нерелевантные формы сведены к нулю или объяснённому минимуму;
+- использовано максимально возможное число подходящих слов ширины;
+- одинаковые формы не скучены;
+- новые факты не появились;
+- ни один исходный факт, ограничение или вывод не исчез и не изменился;
+- каждое добавленное слово правильно по смыслу и логично связано с абзацем;
+- текст читается естественно без ощущения вставленных ключей.
+
+Если правка выглядит сделанной ради анализатора, переписать её, даже если после этого
+останется небольшой обоснованный недобор.
+
+## Результат
+
+Сохранить новый UTF-8 файл, не перезаписывая исходник, если пользователь прямо не
+попросил обратного. По умолчанию использовать `D:\CODEX\outputs`.
+
+Выдать:
+
+1. полный отредактированный текст;
+2. путь к сохранённому файлу;
+3. компактную проверку:
+   - группа: минимум / было / стало;
+   - нерелевантная форма: было / стало;
+   - ширина: подходящих / использовано / пропущено с причиной.
+
+Не перегружать результат внутренними расчётами, но не заявлять об успешной оптимизации
+без фактического пересчёта.

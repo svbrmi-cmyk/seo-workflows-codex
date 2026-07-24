@@ -12,11 +12,12 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::OpenRead($resolvedPath)
 
 try {
+    $namespace = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
     $sharedStrings = @()
     $sharedEntry = $archive.GetEntry('xl/sharedStrings.xml')
 
     if ($null -ne $sharedEntry) {
-        $reader = [System.IO.StreamReader]::new($sharedEntry.Open())
+        $reader = [System.IO.StreamReader]::new($sharedEntry.Open(), [System.Text.Encoding]::UTF8)
         try {
             [xml]$sharedXml = $reader.ReadToEnd()
         }
@@ -25,12 +26,57 @@ try {
         }
 
         $sharedNs = [System.Xml.XmlNamespaceManager]::new($sharedXml.NameTable)
-        $sharedNs.AddNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main')
+        $sharedNs.AddNamespace('x', $namespace)
 
         foreach ($item in $sharedXml.SelectNodes('//x:si', $sharedNs)) {
             $parts = $item.SelectNodes('.//x:t', $sharedNs) |
                 ForEach-Object { $_.InnerText }
             $sharedStrings += ($parts -join '')
+        }
+    }
+
+    $sheetNameByTarget = @{}
+    $workbookEntry = $archive.GetEntry('xl/workbook.xml')
+    $relationsEntry = $archive.GetEntry('xl/_rels/workbook.xml.rels')
+
+    if ($null -ne $workbookEntry -and $null -ne $relationsEntry) {
+        $reader = [System.IO.StreamReader]::new($workbookEntry.Open(), [System.Text.Encoding]::UTF8)
+        try {
+            [xml]$workbookXml = $reader.ReadToEnd()
+        }
+        finally {
+            $reader.Dispose()
+        }
+
+        $reader = [System.IO.StreamReader]::new($relationsEntry.Open(), [System.Text.Encoding]::UTF8)
+        try {
+            [xml]$relationsXml = $reader.ReadToEnd()
+        }
+        finally {
+            $reader.Dispose()
+        }
+
+        $workbookNs = [System.Xml.XmlNamespaceManager]::new($workbookXml.NameTable)
+        $workbookNs.AddNamespace('x', $namespace)
+        $workbookNs.AddNamespace(
+            'r',
+            'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+        )
+
+        $targetByRelation = @{}
+        foreach ($relation in $relationsXml.Relationships.Relationship) {
+            $targetByRelation[$relation.Id] = $relation.Target
+        }
+
+        foreach ($sheet in $workbookXml.SelectNodes('//x:sheets/x:sheet', $workbookNs)) {
+            $relationId = $sheet.GetAttribute(
+                'id',
+                'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+            )
+            if ($targetByRelation.ContainsKey($relationId)) {
+                $targetName = [System.IO.Path]::GetFileName($targetByRelation[$relationId])
+                $sheetNameByTarget[$targetName] = $sheet.name
+            }
         }
     }
 
@@ -41,7 +87,15 @@ try {
         Sort-Object FullName
 
     foreach ($entry in $worksheets) {
-        $reader = [System.IO.StreamReader]::new($entry.Open())
+        $targetName = [System.IO.Path]::GetFileName($entry.FullName)
+        $sheetName = if ($sheetNameByTarget.ContainsKey($targetName)) {
+            $sheetNameByTarget[$targetName]
+        }
+        else {
+            $entry.FullName
+        }
+
+        $reader = [System.IO.StreamReader]::new($entry.Open(), [System.Text.Encoding]::UTF8)
         try {
             [xml]$sheetXml = $reader.ReadToEnd()
         }
@@ -50,8 +104,8 @@ try {
         }
 
         $sheetNs = [System.Xml.XmlNamespaceManager]::new($sheetXml.NameTable)
-        $sheetNs.AddNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main')
-        Write-Output ('SHEET ' + $entry.FullName)
+        $sheetNs.AddNamespace('x', $namespace)
+        Write-Output ('SHEET ' + $sheetName + ' (' + $entry.FullName + ')')
 
         foreach ($row in $sheetXml.SelectNodes('//x:sheetData/x:row', $sheetNs)) {
             $values = @()
