@@ -48,7 +48,7 @@ FUNCTION_WORDS = {
 
 
 def normalize(value: Any) -> str:
-    return str(value or "").casefold().replace("ё", "е")
+    return str(value or "").casefold().replace("\u0451", "е")
 
 
 def normalize_header(value: Any) -> str:
@@ -248,7 +248,11 @@ def depth_rows(path: Path | None) -> list[dict[str, Any]]:
     return result
 
 
-def lsi_groups(path: Path, depth: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def lsi_groups(
+    path: Path,
+    depth: list[dict[str, Any]],
+    breadth_limit: int,
+) -> list[dict[str, Any]]:
     workbook = read_xlsx(path)
     required = {
         "word": ["слова", "слово"],
@@ -280,17 +284,23 @@ def lsi_groups(path: Path, depth: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ["текст у вас", "ваша страница", "ваша страница (повторы)"],
     )
     result = []
+    seen: set[str] = set()
     for row in sheet["rows"][header_index + 1 :]:
         word = str(value_at(row, columns["word"]) or "").strip()
-        median = number(value_at(row, columns["median"]))
-        if not word or median is None or median <= 0:
+        word_key = normalize_header(word)
+        if not word or word_key in seen:
             continue
+        seen.add(word_key)
+        if len(result) >= breadth_limit:
+            break
+        median = number(value_at(row, columns["median"]))
         link = relation_key(value_at(row, columns["link"]))
         forms = set(forms_by_link.get(link, set()))
         forms.add(word)
-        forms.update(supplemental.get(normalize_header(word), []))
+        forms.update(supplemental.get(word_key, []))
         result.append(
             {
+                "breadth_rank": len(result) + 1,
                 "word": word,
                 "forms": sorted(forms, key=normalize),
                 "median": median,
@@ -398,7 +408,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     source_text = args.source.read_text(encoding="utf-8")
     edited_text = args.text.read_text(encoding="utf-8")
     depth = depth_rows(args.depth)
-    groups = lsi_groups(args.lsi, depth)
+    groups = lsi_groups(args.lsi, depth, args.breadth_limit)
     phrases = phrase_rows(args.phrases)
 
     lsi_result = []
@@ -406,7 +416,19 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         before = count_forms(source_text, group["forms"])
         after = count_forms(edited_text, group["forms"])
         median = group["median"]
-        status = "over" if after > median else "at" if after == median else "under"
+        if median is not None and median > 0:
+            status = (
+                "over" if after > median else "at" if after == median else "under"
+            )
+        else:
+            added = max(0, after - before)
+            status = (
+                "breadth-over"
+                if added > 1
+                else "covered"
+                if after > 0
+                else "uncovered"
+            )
         lsi_result.append(
             {
                 **group,
@@ -476,15 +498,20 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
 
     covered_before = sum(item["before"] > 0 for item in lsi_result)
     covered_after = sum(item["after"] > 0 for item in lsi_result)
-    median_sum = sum(float(item["median"]) for item in lsi_result)
+    median_groups = [
+        item
+        for item in lsi_result
+        if item["median"] is not None and float(item["median"]) > 0
+    ]
+    median_sum = sum(float(item["median"]) for item in median_groups)
     depth_before = (
-        sum(min(item["before"], float(item["median"])) for item in lsi_result)
+        sum(min(item["before"], float(item["median"])) for item in median_groups)
         / median_sum
         if median_sum
         else 0.0
     )
     depth_after = (
-        sum(min(item["after"], float(item["median"])) for item in lsi_result)
+        sum(min(item["after"], float(item["median"])) for item in median_groups)
         / median_sum
         if median_sum
         else 0.0
@@ -499,7 +526,12 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         "phrases": str(args.phrases) if args.phrases else None,
         "summary": {
             "lsi_groups": len(lsi_result),
+            "breadth_limit": args.breadth_limit,
+            "median_groups": len(median_groups),
             "lsi_over": sum(item["status"] == "over" for item in lsi_result),
+            "breadth_over": sum(
+                item["status"] == "breadth-over" for item in lsi_result
+            ),
             "covered_before": covered_before,
             "covered_after": covered_after,
             "raw_width_before": round(covered_before / len(lsi_result), 4)
@@ -531,6 +563,7 @@ def print_report(result: dict[str, Any]) -> None:
         "SUMMARY"
         f"\tlsi_groups={summary['lsi_groups']}"
         f"\tlsi_over={summary['lsi_over']}"
+        f"\tbreadth_over={summary['breadth_over']}"
         f"\tcovered={summary['covered_before']}->{summary['covered_after']}"
         f"\twidth={summary['raw_width_before']}->{summary['raw_width_after']}"
         f"\tdepth={summary['raw_depth_before']}->{summary['raw_depth_after']}"
@@ -541,12 +574,12 @@ def print_report(result: dict[str, Any]) -> None:
         f"\twarnings={summary['warnings']}"
     )
     print("LSI\tgroup\tmedian\tbefore\tafter\tstatus")
-    ordered = sorted(
-        result["lsi_groups"],
-        key=lambda item: (-float(item["median"]), normalize(item["word"])),
-    )
+    ordered = sorted(result["lsi_groups"], key=lambda item: item["breadth_rank"])
     for item in ordered:
-        if item["before"] != item["after"] or item["status"] == "over":
+        if item["before"] != item["after"] or item["status"] in {
+            "over",
+            "breadth-over",
+        }:
             print(
                 "LSI"
                 f"\t{item['word']}\t{item['median']}"
@@ -578,7 +611,15 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--lsi", required=True, type=Path, help="LSI XLSX")
     result.add_argument("--depth", type=Path, help="Таблица глубины XLSX")
     result.add_argument("--phrases", type=Path, help="Таблица N-грамм XLSX")
-    result.add_argument("--json", action="store_true", help="Вывести JSON вместо отчёта")
+    result.add_argument(
+        "--breadth-limit",
+        type=int,
+        default=150,
+        choices=range(140, 151),
+        metavar="140..150",
+        help="Число первых разных LSI-групп для проверки ширины (по умолчанию 150)",
+    )
+    result.add_argument("--json", action="store_true", help="Вывести JSON вместо отчета")
     result.add_argument("--json-output", type=Path, help="Дополнительно сохранить JSON")
     result.add_argument(
         "--strict",
@@ -604,7 +645,11 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         print_report(result)
-    failed = result["summary"]["lsi_over"] or result["summary"]["negative_above"]
+    failed = (
+        result["summary"]["lsi_over"]
+        or result["summary"]["breadth_over"]
+        or result["summary"]["negative_above"]
+    )
     return 1 if args.strict and failed else 0
 
 
