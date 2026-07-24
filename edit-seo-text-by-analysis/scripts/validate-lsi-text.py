@@ -190,6 +190,92 @@ def split_forms(value: Any) -> list[str]:
     ]
 
 
+def read_text_auto(path: Path) -> str:
+    raw = path.read_bytes()
+    for encoding in ("utf-8-sig", "utf-8", "cp1251"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"Не удалось определить кодировку файла {path}")
+
+
+def simple_word_list(path: Path | None) -> list[str]:
+    if path is None:
+        return []
+    result = []
+    seen = set()
+    for item in re.split(r"[,;\r\n]+", read_text_auto(path)):
+        word = item.strip()
+        key = normalize_header(word)
+        if word and key and key not in seen:
+            seen.add(key)
+            result.append(word)
+    return result
+
+
+def irrelevant_rows(path: Path | None) -> list[dict[str, Any]]:
+    if path is None:
+        return []
+    text = read_text_auto(path)
+    pattern = re.compile(
+        r"нерелевантное слово\s*\(точная словоформа\)\s+(.+?)\s+"
+        r"у вас повторяется\s+(\d+)\s+раз",
+        re.IGNORECASE,
+    )
+    result = []
+    seen = set()
+    for match in pattern.finditer(text):
+        form = match.group(1).strip()
+        key = normalize_header(form)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(
+            {
+                "form": form,
+                "reported_current": int(match.group(2)),
+                "target": 0,
+            }
+        )
+    remaining_lines = []
+    for line in text.splitlines():
+        normalized_line = normalize_header(line)
+        if not normalized_line or normalized_line == "нерелевантные слова":
+            continue
+        if pattern.search(line):
+            continue
+        remaining_lines.append(line)
+    for form in re.split(r"[,;\r\n]+", "\n".join(remaining_lines)):
+        form = form.strip()
+        explicit_target = re.match(r"^(.+?)\s*(?:->|=>)\s*(\d+)$", form)
+        target = 0
+        if explicit_target:
+            form = explicit_target.group(1).strip()
+            target = int(explicit_target.group(2))
+        key = normalize_header(form)
+        if form and key and key not in seen:
+            seen.add(key)
+            result.append(
+                {
+                    "form": form,
+                    "reported_current": None,
+                    "target": target,
+                }
+            )
+    return result
+
+
+def fact_tokens(text: str) -> set[str]:
+    return {
+        normalize(item).replace(",", ".")
+        for item in re.findall(
+            r"(?iu)(?:[a-zа-я]*\d+[a-zа-я0-9-]*|\d+(?:[.,]\d+)*|[%₽])",
+            text,
+        )
+    }
+
+
 def detect_sheet(
     workbook: list[dict[str, Any]],
     required: dict[str, list[str]],
@@ -222,27 +308,42 @@ def depth_rows(path: Path | None) -> list[dict[str, Any]]:
         {
             "word": ["слово"],
             "forms": ["словоформы", "словоформа"],
-            "repeats": ["повторы"],
-            "maximum": ["максимум по рекомендациям"],
-            "delta": ["добавить/удалить"],
         },
         "глубин",
     )
     if detected is None:
         raise ValueError(f"Не найдена таблица глубины в {path}")
     sheet, header_index, columns = detected
+    headers = sheet["rows"][header_index]
+    repeats_column = find_column(headers, ["повторы", "текст у вас"])
+    minimum_column = find_column(headers, ["минимум по рекомендациям"])
+    maximum_column = find_column(headers, ["максимум по рекомендациям"])
+    delta_column = find_column(headers, ["добавить/удалить"])
+    if all(
+        item is None
+        for item in (
+            repeats_column,
+            minimum_column,
+            maximum_column,
+            delta_column,
+        )
+    ):
+        raise ValueError(f"В таблице глубины нет числовых рекомендаций: {path}")
     result = []
     for row in sheet["rows"][header_index + 1 :]:
         word = str(value_at(row, columns["word"]) or "").strip()
         if not word:
             continue
+        forms = set(split_forms(value_at(row, columns["forms"])))
+        forms.add(word)
         result.append(
             {
                 "word": word,
-                "forms": split_forms(value_at(row, columns["forms"])),
-                "repeats": number(value_at(row, columns["repeats"])),
-                "maximum": number(value_at(row, columns["maximum"])),
-                "delta": number(value_at(row, columns["delta"])),
+                "forms": sorted(forms, key=normalize),
+                "repeats": number(value_at(row, repeats_column)),
+                "minimum": number(value_at(row, minimum_column)),
+                "maximum": number(value_at(row, maximum_column)),
+                "delta": number(value_at(row, delta_column)),
             }
         )
     return result
@@ -404,12 +505,49 @@ def introduced_patterns(source_text: str, edited_text: str) -> dict[str, list[di
     return result
 
 
+def coverage_metrics(items: list[dict[str, Any]]) -> dict[str, Any]:
+    covered_before = sum(item["before"] > 0 for item in items)
+    covered_after = sum(item["after"] > 0 for item in items)
+    median_groups = [
+        item
+        for item in items
+        if item["median"] is not None and float(item["median"]) > 0
+    ]
+    median_sum = sum(float(item["median"]) for item in median_groups)
+    depth_before = (
+        sum(min(item["before"], float(item["median"])) for item in median_groups)
+        / median_sum
+        if median_sum
+        else 0.0
+    )
+    depth_after = (
+        sum(min(item["after"], float(item["median"])) for item in median_groups)
+        / median_sum
+        if median_sum
+        else 0.0
+    )
+    return {
+        "groups": len(items),
+        "median_groups": len(median_groups),
+        "covered_before": covered_before,
+        "covered_after": covered_after,
+        "width_before": round(covered_before / len(items), 4) if items else 0.0,
+        "width_after": round(covered_after / len(items), 4) if items else 0.0,
+        "depth_before": round(depth_before, 4),
+        "depth_after": round(depth_after, 4),
+    }
+
+
 def analyze(args: argparse.Namespace) -> dict[str, Any]:
-    source_text = args.source.read_text(encoding="utf-8")
-    edited_text = args.text.read_text(encoding="utf-8")
+    source_text = read_text_auto(args.source)
+    edited_text = read_text_auto(args.text)
     depth = depth_rows(args.depth)
     groups = lsi_groups(args.lsi, depth, args.breadth_limit)
     phrases = phrase_rows(args.phrases)
+    irrelevant = irrelevant_rows(args.irrelevant)
+    width_words = simple_word_list(args.width_words)
+    relevant_words = simple_word_list(args.relevant_groups)
+    relevant_keys = {normalize_header(item) for item in relevant_words}
 
     lsi_result = []
     for group in groups:
@@ -441,32 +579,55 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     depth_result = []
+    minimum_result = []
     for item in depth:
         delta = item["delta"]
-        if delta is None or delta >= 0:
-            continue
         before = count_forms(source_text, item["forms"])
         after = count_forms(edited_text, item["forms"])
         repeats = item["repeats"]
         synchronized = repeats is not None and before == repeats
-        if synchronized and item["maximum"] is not None:
-            target = item["maximum"]
+        maximum = item["maximum"]
+        if delta is not None and delta < 0:
+            target = (
+                maximum
+                if synchronized and maximum is not None
+                else max(0.0, before - abs(delta))
+            )
+        elif maximum is not None and before > maximum:
+            target = maximum
         else:
-            target = max(0.0, before - abs(delta))
-        status = "at" if after == target else "above" if after > target else "below"
-        depth_result.append(
-            {
-                **item,
-                "repeats": clean_number(repeats),
-                "maximum": clean_number(item["maximum"]),
-                "delta": clean_number(delta),
-                "before": before,
-                "after": after,
-                "target": clean_number(target),
-                "synchronized": synchronized,
-                "status": status,
-            }
+            target = None
+        if target is not None:
+            status = "at" if after == target else "above" if after > target else "below"
+            depth_result.append(
+                {
+                    **item,
+                    "repeats": clean_number(repeats),
+                    "minimum": clean_number(item["minimum"]),
+                    "maximum": clean_number(maximum),
+                    "delta": clean_number(delta),
+                    "before": before,
+                    "after": after,
+                    "target": clean_number(target),
+                    "synchronized": synchronized,
+                    "status": status,
+                }
+            )
+        minimum = item["minimum"]
+        is_relevant_minimum = (
+            not relevant_keys or normalize_header(item["word"]) in relevant_keys
         )
+        if minimum is not None and minimum > 0 and is_relevant_minimum:
+            minimum_result.append(
+                {
+                    "word": item["word"],
+                    "forms": item["forms"],
+                    "minimum": clean_number(minimum),
+                    "before": before,
+                    "after": after,
+                    "status": "at-least" if after >= minimum else "below",
+                }
+            )
 
     phrase_result = []
     for item in phrases:
@@ -480,8 +641,41 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
                     "analyzer_current": clean_number(item["analyzer_current"]),
                     "before": before,
                     "after": after,
+                    "status": (
+                        "over"
+                        if after > item["median"]
+                        else "at"
+                        if after == item["median"]
+                        else "under"
+                    ),
                 }
             )
+
+    irrelevant_result = []
+    for item in irrelevant:
+        before = count_forms(source_text, [item["form"]])
+        after = count_forms(edited_text, [item["form"]])
+        irrelevant_result.append(
+            {
+                **item,
+                "before": before,
+                "after": after,
+                "status": "at" if after <= item["target"] else "above",
+            }
+        )
+
+    width_result = []
+    for word in width_words:
+        before = count_forms(source_text, [word])
+        after = count_forms(edited_text, [word])
+        width_result.append(
+            {
+                "word": word,
+                "before": before,
+                "after": after,
+                "status": "covered" if after > 0 else "uncovered",
+            }
+        )
 
     warnings = []
     for item in lsi_result:
@@ -495,28 +689,36 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             warnings.append(
                 f"Глубина {item['word']}: таблица несинхронна с исходным текстом"
             )
+    for item in irrelevant_result:
+        reported = item["reported_current"]
+        if reported is not None and reported != item["before"]:
+            warnings.append(
+                f"Нерелевантное {item['form']}: файл={item['before']}, "
+                f"анализатор={reported}"
+            )
 
-    covered_before = sum(item["before"] > 0 for item in lsi_result)
-    covered_after = sum(item["after"] > 0 for item in lsi_result)
-    median_groups = [
+    raw_metrics = coverage_metrics(lsi_result)
+    matched_relevant_keys = {
+        normalize_header(item["word"])
+        for item in lsi_result
+        if normalize_header(item["word"]) in relevant_keys
+    }
+    filtered_groups = [
         item
         for item in lsi_result
-        if item["median"] is not None and float(item["median"]) > 0
+        if normalize_header(item["word"]) in relevant_keys
     ]
-    median_sum = sum(float(item["median"]) for item in median_groups)
-    depth_before = (
-        sum(min(item["before"], float(item["median"])) for item in median_groups)
-        / median_sum
-        if median_sum
-        else 0.0
-    )
-    depth_after = (
-        sum(min(item["after"], float(item["median"])) for item in median_groups)
-        / median_sum
-        if median_sum
-        else 0.0
-    )
+    filtered_metrics = coverage_metrics(filtered_groups) if relevant_keys else None
+    for missing in sorted(relevant_keys - matched_relevant_keys):
+        warnings.append(f"Релевантная группа не найдена в первых строках: {missing}")
+
     patterns = introduced_patterns(source_text, edited_text)
+    source_facts = fact_tokens(source_text)
+    edited_facts = fact_tokens(edited_text)
+    missing_facts = sorted(source_facts - edited_facts)
+    added_facts = sorted(edited_facts - source_facts)
+    source_yo = len(re.findall("[\u0401\u0451]", source_text))
+    edited_yo = len(re.findall("[\u0401\u0451]", edited_text))
 
     return {
         "source": str(args.source),
@@ -524,35 +726,79 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         "lsi": str(args.lsi),
         "depth": str(args.depth) if args.depth else None,
         "phrases": str(args.phrases) if args.phrases else None,
+        "irrelevant": str(args.irrelevant) if args.irrelevant else None,
+        "width_words": str(args.width_words) if args.width_words else None,
+        "relevant_groups": str(args.relevant_groups)
+        if args.relevant_groups
+        else None,
         "summary": {
             "lsi_groups": len(lsi_result),
             "breadth_limit": args.breadth_limit,
-            "median_groups": len(median_groups),
+            "median_groups": raw_metrics["median_groups"],
             "lsi_over": sum(item["status"] == "over" for item in lsi_result),
             "breadth_over": sum(
                 item["status"] == "breadth-over" for item in lsi_result
             ),
-            "covered_before": covered_before,
-            "covered_after": covered_after,
-            "raw_width_before": round(covered_before / len(lsi_result), 4)
-            if lsi_result
-            else 0.0,
-            "raw_width_after": round(covered_after / len(lsi_result), 4)
-            if lsi_result
-            else 0.0,
-            "raw_depth_before": round(depth_before, 4),
-            "raw_depth_after": round(depth_after, 4),
+            "covered_before": raw_metrics["covered_before"],
+            "covered_after": raw_metrics["covered_after"],
+            "raw_width_before": raw_metrics["width_before"],
+            "raw_width_after": raw_metrics["width_after"],
+            "raw_depth_before": raw_metrics["depth_before"],
+            "raw_depth_after": raw_metrics["depth_after"],
+            "filtered_groups": filtered_metrics["groups"]
+            if filtered_metrics
+            else None,
+            "filtered_covered_before": filtered_metrics["covered_before"]
+            if filtered_metrics
+            else None,
+            "filtered_covered_after": filtered_metrics["covered_after"]
+            if filtered_metrics
+            else None,
+            "filtered_width_before": filtered_metrics["width_before"]
+            if filtered_metrics
+            else None,
+            "filtered_width_after": filtered_metrics["width_after"]
+            if filtered_metrics
+            else None,
+            "filtered_depth_before": filtered_metrics["depth_before"]
+            if filtered_metrics
+            else None,
+            "filtered_depth_after": filtered_metrics["depth_after"]
+            if filtered_metrics
+            else None,
             "negative_groups": len(depth_result),
             "negative_above": sum(item["status"] == "above" for item in depth_result),
+            "minimum_groups": len(minimum_result),
+            "minimum_below": sum(item["status"] == "below" for item in minimum_result),
+            "irrelevant_groups": len(irrelevant_result),
+            "irrelevant_above": sum(
+                item["status"] == "above" for item in irrelevant_result
+            ),
+            "width_words": len(width_result),
+            "width_covered_before": sum(
+                item["before"] > 0 for item in width_result
+            ),
+            "width_covered_after": sum(item["after"] > 0 for item in width_result),
             "introduced_token_flags": len(patterns["tokens"]),
             "introduced_frame_flags": len(patterns["bigrams"])
             + len(patterns["trigrams"]),
+            "source_yo": source_yo,
+            "edited_yo": edited_yo,
+            "missing_fact_tokens": len(missing_facts),
+            "added_fact_tokens": len(added_facts),
             "warnings": len(warnings),
         },
         "lsi_groups": lsi_result,
         "negative_groups": depth_result,
+        "minimum_groups": minimum_result,
         "phrases_present": phrase_result,
+        "irrelevant_groups": irrelevant_result,
+        "width_word_groups": width_result,
         "introduced_patterns": patterns,
+        "fact_tokens": {
+            "missing": missing_facts,
+            "added": added_facts,
+        },
         "warnings": warnings,
     }
 
@@ -569,10 +815,28 @@ def print_report(result: dict[str, Any]) -> None:
         f"\tdepth={summary['raw_depth_before']}->{summary['raw_depth_after']}"
         f"\tnegative_groups={summary['negative_groups']}"
         f"\tnegative_above={summary['negative_above']}"
+        f"\tminimum_below={summary['minimum_below']}"
+        f"\tirrelevant_above={summary['irrelevant_above']}"
+        f"\twidth_words={summary['width_covered_before']}"
+        f"->{summary['width_covered_after']}/{summary['width_words']}"
         f"\tintroduced_flags={summary['introduced_token_flags']}"
         f"\tframe_flags={summary['introduced_frame_flags']}"
+        f"\tyo={summary['source_yo']}->{summary['edited_yo']}"
+        f"\tfacts_missing={summary['missing_fact_tokens']}"
+        f"\tfacts_added={summary['added_fact_tokens']}"
         f"\twarnings={summary['warnings']}"
     )
+    if summary["filtered_groups"] is not None:
+        print(
+            "FILTERED"
+            f"\tgroups={summary['filtered_groups']}"
+            f"\tcovered={summary['filtered_covered_before']}"
+            f"->{summary['filtered_covered_after']}"
+            f"\twidth={summary['filtered_width_before']}"
+            f"->{summary['filtered_width_after']}"
+            f"\tdepth={summary['filtered_depth_before']}"
+            f"->{summary['filtered_depth_after']}"
+        )
     print("LSI\tgroup\tmedian\tbefore\tafter\tstatus")
     ordered = sorted(result["lsi_groups"], key=lambda item: item["breadth_rank"])
     for item in ordered:
@@ -593,6 +857,34 @@ def print_report(result: dict[str, Any]) -> None:
             f"\t{item['before']}\t{item['after']}\t{item['status']}"
             f"\t{str(item['synchronized']).lower()}"
         )
+    print("MINIMUM\tgroup\tminimum\tbefore\tafter\tstatus")
+    for item in result["minimum_groups"]:
+        if item["before"] != item["after"] or item["status"] == "below":
+            print(
+                "MINIMUM"
+                f"\t{item['word']}\t{item['minimum']}"
+                f"\t{item['before']}\t{item['after']}\t{item['status']}"
+            )
+    print("IRRELEVANT\tform\ttarget\tbefore\tafter\tstatus")
+    for item in result["irrelevant_groups"]:
+        if item["before"] or item["after"]:
+            print(
+                "IRRELEVANT"
+                f"\t{item['form']}\t{item['target']}"
+                f"\t{item['before']}\t{item['after']}\t{item['status']}"
+            )
+    print("WIDTH\tword\tbefore\tafter\tstatus")
+    for item in result["width_word_groups"]:
+        if item["before"] != item["after"]:
+            print(
+                "WIDTH"
+                f"\t{item['word']}\t{item['before']}"
+                f"\t{item['after']}\t{item['status']}"
+            )
+    for token in result["fact_tokens"]["missing"]:
+        print(f"FACT\tmissing\t{token}")
+    for token in result["fact_tokens"]["added"]:
+        print(f"FACT\tadded\t{token}")
     for warning in result["warnings"]:
         print(f"WARNING\t{warning}")
     for label in ("tokens", "bigrams", "trigrams"):
@@ -612,6 +904,21 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--depth", type=Path, help="Таблица глубины XLSX")
     result.add_argument("--phrases", type=Path, help="Таблица N-грамм XLSX")
     result.add_argument(
+        "--irrelevant",
+        type=Path,
+        help="Файл точных нерелевантных слов анализатора",
+    )
+    result.add_argument(
+        "--width-words",
+        type=Path,
+        help="Дополнительный список слов для ширины",
+    )
+    result.add_argument(
+        "--relevant-groups",
+        type=Path,
+        help="Проверенный список релевантных основных LSI-групп",
+    )
+    result.add_argument(
         "--breadth-limit",
         type=int,
         default=150,
@@ -624,7 +931,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--strict",
         action="store_true",
-        help="Вернуть код 1 при превышении медианы или цели удаления",
+        help="Вернуть код 1 при нарушении обязательных ограничений",
     )
     return result
 
@@ -649,6 +956,10 @@ def main() -> int:
         result["summary"]["lsi_over"]
         or result["summary"]["breadth_over"]
         or result["summary"]["negative_above"]
+        or result["summary"]["irrelevant_above"]
+        or result["summary"]["edited_yo"]
+        or result["summary"]["missing_fact_tokens"]
+        or result["summary"]["added_fact_tokens"]
     )
     return 1 if args.strict and failed else 0
 

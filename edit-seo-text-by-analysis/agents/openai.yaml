@@ -1,4 +1,4 @@
 interface:
-  display_name: "LSI-насыщение по медиане"
-  short_description: "Расширяет семантику текста по медиане XLSX"
-  default_prompt: "Use $edit-seo-text-by-analysis to cover as many distinct relevant groups as possible from the first 150 LSI rows, then optimize core depth, resolve analyzer conflicts, diversify all linguistic framing, and validate facts, medians, deletions, breadth, and readability."
+  display_name: "LSI-редактор ширины и глубины"
+  short_description: "Расширяет LSI-словарь по первым 150 группам"
+  default_prompt: "Use $edit-seo-text-by-analysis to edit the supplied text from all analyzer files, expand distinct relevant coverage across the first 150 LSI groups, control medians and deletions, preserve facts, and return the complete polished text with an audit."
