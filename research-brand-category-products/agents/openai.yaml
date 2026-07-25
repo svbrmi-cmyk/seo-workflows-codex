@@ -1,4 +1,0 @@
-interface:
-  display_name: "Брендовый продуктовый бриф"
-  short_description: "Исследует бренд, категории, линейки и реальные преимущества"
-  default_prompt: "Use $research-brand-category-products to study the supplied retailer page, the official brand site and authoritative external sources, then produce a clear Russian brief covering what the brand makes, how it positions itself, what it is known for, its categories and collections, differences from competitors, and verified buyer advantages."
