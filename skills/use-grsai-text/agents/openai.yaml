@@ -1,0 +1,11 @@
+interface:
+  display_name: "GRS AI Text"
+  short_description: "Generate GRS AI text directly into Markdown"
+  default_prompt: "Use $use-grsai-text to generate this text through GRS AI and save it as Markdown without reading it."
+policy:
+  allow_implicit_invocation: true
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "grsai"
+      description: "GRS AI text generation and Markdown storage server"
