@@ -1,0 +1,4 @@
+interface:
+  display_name: "SEO/GEO-аудитор"
+  short_description: "Аудит для Google, Яндекса и AI-поиска"
+  default_prompt: "Используй $seo-geo-auditor, чтобы провести доказательный аудит страницы для Google, Яндекса и AI-поиска."
