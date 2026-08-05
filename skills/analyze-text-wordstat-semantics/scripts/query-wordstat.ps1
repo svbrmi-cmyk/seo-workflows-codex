@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateCount(1, 7)]
+    [ValidateCount(3, 15)]
     [string[]]$Phrases,
 
     [ValidatePattern('^[a-z0-9]{20}$')]
@@ -20,13 +20,13 @@ if ([string]::IsNullOrWhiteSpace($apiKey)) {
 }
 
 $cleanPhrases = @($Phrases | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
-if ($cleanPhrases.Count -eq 0 -or $cleanPhrases.Count -gt 7) {
-    throw 'Provide from 1 to 7 unique non-empty phrases.'
+if ($cleanPhrases.Count -lt 3 -or $cleanPhrases.Count -gt 15) {
+    throw 'Provide from 3 to 15 unique non-empty phrases.'
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $OutputPath = "D:\CODEX\outputs\wordstat-cover-$stamp.json"
+    $OutputPath = "D:\CODEX\outputs\wordstat-semantics-$stamp.json"
 }
 
 $resolvedOutput = [IO.Path]::GetFullPath($OutputPath)
@@ -46,23 +46,16 @@ $records = [Collections.Generic.List[object]]::new()
 
 try {
     foreach ($phrase in $cleanPhrases) {
-        $payload = @{
-            phrase = $phrase
-            numPhrases = 100
-            folderId = $FolderId
-        } | ConvertTo-Json -Compress
-
+        $payload = @{ phrase = $phrase; numPhrases = 100; folderId = $FolderId } | ConvertTo-Json -Compress
         $content = [Net.Http.StringContent]::new($payload, [Text.Encoding]::UTF8, 'application/json')
         try {
             $response = $client.PostAsync($endpoint, $content).GetAwaiter().GetResult()
             $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
             $responseText = [Text.Encoding]::UTF8.GetString($bytes)
-
             if (-not $response.IsSuccessStatusCode) {
                 $status = [int]$response.StatusCode
                 throw "Wordstat request failed with HTTP $status. Check access role, API-key scope, quota, billing, and request parameters."
             }
-
             $data = $responseText | ConvertFrom-Json
             $records.Add([pscustomobject]@{
                 checkedQuery = $phrase
