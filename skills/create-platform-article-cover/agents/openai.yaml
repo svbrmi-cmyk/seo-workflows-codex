@@ -1,4 +1,4 @@
 interface:
   display_name: "Обложка статьи для площадки"
-  short_description: "Обложка по материалу и спросу Wordstat"
-  default_prompt: "Используй $create-platform-article-cover, чтобы проверить интент через Wordstat API, разработать обложку под площадку и составить готовый русский промпт без генерации изображения."
+  short_description: "Обложка и запросы из Wordstat в Markdown"
+  default_prompt: "Используй $create-platform-article-cover, чтобы проверить интент через Wordstat API, сохранить подходящие запросы в Markdown и составить русский промпт обложки без генерации изображения."
