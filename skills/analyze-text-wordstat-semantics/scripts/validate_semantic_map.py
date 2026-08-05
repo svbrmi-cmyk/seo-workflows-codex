@@ -116,6 +116,8 @@ def validate(data: dict) -> tuple[list[str], list[str]]:
             errors.append("categories must be empty for NEEDS_INPUT")
     if status == "NO_ELIGIBLE_KEYWORD" and categories != []:
         errors.append("categories must be empty for NO_ELIGIBLE_KEYWORD")
+    if status == "NO_ELIGIBLE_KEYWORD" and keyword is not None:
+        errors.append("main_keyword must be null for NO_ELIGIBLE_KEYWORD")
     if status == "PASS":
         if not isinstance(keyword, dict):
             errors.append("main_keyword is required for PASS")
