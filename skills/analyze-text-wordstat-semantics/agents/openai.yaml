@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wordstat-семантика текста"
+  short_description: "Wordstat API, ключи в Markdown и семантика"
+  default_prompt: "Используй $analyze-text-wordstat-semantics, чтобы автоматически проверить текст через Wordstat API, сохранить варианты запросов в Markdown и собрать семантику по 21 категории."
