@@ -14,9 +14,12 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 $endpoint = 'https://searchapi.api.cloud.yandex.net/v2/wordstat/topRequests'
 $apiKey = [Environment]::GetEnvironmentVariable('YANDEX_API_KEY', 'Process')
+if ([string]::IsNullOrWhiteSpace($apiKey)) {
+    $apiKey = [Environment]::GetEnvironmentVariable('YANDEX_API_KEY', 'User')
+}
 
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
-    throw 'NEEDS_API_KEY: set YANDEX_API_KEY for the current process. The skill never reads or stores the key elsewhere.'
+    throw 'NEEDS_API_KEY: set YANDEX_API_KEY in the current process or as a Windows User environment variable. Never pass the key as a script argument.'
 }
 
 $cleanPhrases = @($Phrases | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
