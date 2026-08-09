@@ -44,6 +44,7 @@ if (-not (Test-Path -LiteralPath $outputDirectory)) {
 }
 
 $client = [Net.Http.HttpClient]::new()
+$client.Timeout = [TimeSpan]::FromSeconds(45)
 $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Api-Key', $apiKey)
 $records = [Collections.Generic.List[object]]::new()
 
@@ -52,7 +53,12 @@ try {
         $payload = @{ phrase = $phrase; numPhrases = 100; folderId = $FolderId } | ConvertTo-Json -Compress
         $content = [Net.Http.StringContent]::new($payload, [Text.Encoding]::UTF8, 'application/json')
         try {
-            $response = $client.PostAsync($endpoint, $content).GetAwaiter().GetResult()
+            try {
+                $response = $client.PostAsync($endpoint, $content).GetAwaiter().GetResult()
+            }
+            catch [Net.Http.HttpRequestException] {
+                throw 'WORDSTAT_NETWORK_ERROR: HTTPS connection to the official Wordstat API failed before an HTTP response was received. Do not rotate the API key. Run scripts/test-wordstat-network.ps1 and check VPN routing, TCP/443, and stale WinHTTP proxy settings.'
+            }
             $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
             $responseText = [Text.Encoding]::UTF8.GetString($bytes)
             if (-not $response.IsSuccessStatusCode) {
