@@ -120,6 +120,7 @@ def request_search(args: argparse.Namespace, api_key: str) -> dict[str, Any]:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        body = body.replace(api_key, "[REDACTED]")
         raise RuntimeError(f"Perplexity HTTP {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Perplexity network error: {exc.reason}") from exc

@@ -137,6 +137,7 @@ def main() -> int:
         api_response = json.loads(raw_response)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        body = body.replace(api_key, "[REDACTED]")
         try:
             api_error: Any = json.loads(body)
         except json.JSONDecodeError:
