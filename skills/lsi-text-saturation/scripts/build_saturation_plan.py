@@ -18,6 +18,7 @@ from validate_lsi_saturation import (
     count_group,
     normalize,
     paragraph_count,
+    local_repetitions,
     read_terms,
     tokens,
 )
@@ -50,14 +51,16 @@ class PlanGroup:
 
     @property
     def target(self) -> int:
-        if self.median_seen:
-            return self.median
         if self.recommendation < 0:
             return 0
+        if self.median_seen:
+            return self.median
         return self.minimum
 
     @property
     def cap(self) -> int:
+        if self.recommendation < 0:
+            return self.maximum if self.maximum > 0 else 0
         if self.median_seen:
             return self.median
         if self.maximum > 0:
@@ -261,6 +264,8 @@ def audit_plan(
         for form in group.forms
     }
     monoculture = anti_monoculture(source, edited, target_forms)
+    active_groups = [group for group in groups if state(group, exclude) in {"positive", "negative"}]
+    local = local_repetitions(edited, active_groups)
 
     return {
         "summary": {
@@ -282,10 +287,17 @@ def audit_plan(
             "count_mismatches": sum(bool(row["count_mismatch"]) for row in rows),
             "monoculture_words": len(monoculture["words"]),
             "monoculture_ngrams": len(monoculture["ngrams"]),
+            "same_sentence_repetitions": len(local["same_sentence_groups"]),
+            "adjacent_sentence_repetitions": len(local["adjacent_groups"]),
+            "paragraph_repetitions": len(local["paragraph_groups"]),
+            "same_sentence_word_repetitions": len(local["same_sentence_words"]),
+            "adjacent_sentence_word_repetitions": len(local["adjacent_words"]),
+            "paragraph_word_repetitions": len(local["paragraph_words"]),
             "yo_symbols": edited.count("\u0451") + edited.count("\u0401"),
         },
         "groups": rows,
         "anti_monoculture": monoculture,
+        "local_repetitions": local,
     }
 
 
@@ -301,6 +313,8 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
         "MISSING_WIDTH={missing_width} TARGET_DEFICITS={target_deficits} "
         "OVER_CAP={over_cap} NEGATIVE_VIOLATIONS={negative_violations} "
         "CLUSTERED={clustered} MONOCULTURE={monoculture_words}/{monoculture_ngrams} "
+        "LOCAL={same_sentence_repetitions}/{adjacent_sentence_repetitions}/{paragraph_repetitions} "
+        "WORDS={same_sentence_word_repetitions}/{adjacent_sentence_word_repetitions}/{paragraph_word_repetitions} "
         "YO={yo_symbols}".format(**summary)
     )
     for warning in warnings:
@@ -330,6 +344,12 @@ def failures(report: dict[str, object]) -> list[str]:
         ("есть скопления", "clustered"),
         ("есть повторяющаяся обвязка", "monoculture_words"),
         ("есть повторяющиеся N-граммы", "monoculture_ngrams"),
+        ("целевая группа повторяется в одном предложении", "same_sentence_repetitions"),
+        ("целевая группа повторяется в соседних предложениях", "adjacent_sentence_repetitions"),
+        ("целевая группа чрезмерно сконцентрирована в одном абзаце", "paragraph_repetitions"),
+        ("знаменательное слово повторяется в одном предложении", "same_sentence_word_repetitions"),
+        ("знаменательное слово повторяется в соседних предложениях", "adjacent_sentence_word_repetitions"),
+        ("знаменательное слово чрезмерно сконцентрировано в одном абзаце", "paragraph_word_repetitions"),
         ("найден символ U+0451", "yo_symbols"),
     ]
     return [message for message, key in checks if int(summary[key]) > 0]
@@ -368,6 +388,17 @@ def self_test() -> int:
         tokens("Мебель дополняют светом. Для мебели важен уход. Между мебелью и стеной остается стык."),
         morphology,
     )
+    negative_with_median = PlanGroup(
+        8,
+        "должно",
+        ("должно", "должна", "должен", "должны"),
+        4,
+        True,
+        5,
+        0,
+        2,
+        -2,
+    )
     checks = {
         "width_complete": summary["missing_width"] == 0,
         "targets_met": summary["target_deficits"] == 0,
@@ -377,6 +408,8 @@ def self_test() -> int:
         "distributed": summary["clustered"] == 0,
         "no_monoculture": summary["monoculture_words"] == 0 and summary["monoculture_ngrams"] == 0,
         "all_word_forms_counted": morphology_count == 3,
+        "negative_overrides_median_target": negative_with_median.target == 0,
+        "negative_uses_reduction_cap": negative_with_median.cap == 2,
     }
     for name, passed in checks.items():
         print(f"{'PASS' if passed else 'FAIL'} {name}")

@@ -52,12 +52,17 @@ def main() -> int:
 
     text_tokens = normalize(args.text.read_text(encoding="utf-8-sig")).split()
     rules = json.loads(args.rules.read_text(encoding="utf-8-sig"))
+    if not isinstance(rules, dict):
+        raise SystemExit("Файл правил должен содержать JSON-объект")
+    if not rules.get("exact_phrases") and not rules.get("groups"):
+        raise SystemExit("Файл правил пуст: нет exact_phrases или groups")
     results: list[dict[str, object]] = []
 
     for rule in rules.get("exact_phrases", []):
         phrase = str(rule["phrase"])
         actual = count_phrase(text_tokens, phrase)
-        item = audit_item(phrase, actual, int(rule.get("min", 0)), rule.get("max"))
+        maximum = rule.get("max")
+        item = audit_item(phrase, actual, int(rule.get("min", 0)), None if maximum is None else int(maximum))
         item["kind"] = "exact_phrase"
         results.append(item)
 
@@ -65,7 +70,8 @@ def main() -> int:
         label = str(rule["label"])
         forms = [str(form) for form in rule.get("forms", [label])]
         actual = count_group(text_tokens, forms)
-        item = audit_item(label, actual, int(rule.get("min", 0)), rule.get("max"))
+        maximum = rule.get("max")
+        item = audit_item(label, actual, int(rule.get("min", 0)), None if maximum is None else int(maximum))
         item["kind"] = "wordform_group"
         item["forms"] = forms
         results.append(item)

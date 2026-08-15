@@ -20,12 +20,13 @@ except ImportError as exc:  # pragma: no cover
 
 TOKEN_RE = re.compile("[A-Za-zА-Яа-я\\u0401\\u04510-9]+(?:-[A-Za-zА-Яа-я\\u0401\\u04510-9]+)*")
 PARAGRAPH_RE = re.compile(r"(?:\r?\n)\s*(?:\r?\n)+")
+SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 STOPWORDS = {
     "а", "без", "более", "бы", "был", "была", "были", "было", "в", "вам",
     "вас", "весь", "во", "вот", "все", "для", "до", "его", "ее", "если",
     "есть", "еще", "же", "за", "и", "из", "или", "их", "к", "как", "ко",
     "который", "ли", "на", "над", "не", "но", "о", "об", "от", "по", "под",
-    "при", "с", "со", "так", "также", "то", "у", "уже", "что", "чтобы",
+    "перед", "после", "при", "с", "со", "так", "также", "то", "у", "уже", "что", "чтобы",
     "это", "этот",
 }
 
@@ -96,10 +97,13 @@ def read_groups(path: Path, limit: int) -> tuple[list[Group], list[str]]:
     seen: set[str] = set()
     for row_number, row in enumerate(main.iter_rows(min_row=2, values_only=True), start=2):
         label = normalize(row[word_col] if word_col < len(row) else "")
-        if not label or label in seen:
+        if not label:
             continue
-        seen.add(label)
         link = normalize(row[link_col] if link_col is not None and link_col < len(row) else "")
+        identity = link or label
+        if identity in seen:
+            continue
+        seen.add(identity)
         median = as_int(row[median_col] if median_col < len(row) else 0)
         raw.append((row_number, label, median, link))
         if len(raw) >= limit:
@@ -229,6 +233,82 @@ def anti_monoculture(source: str, edited: str, target_forms: set[str]) -> dict[s
     return {"words": repeated_words[:30], "ngrams": repeated_ngrams[:30]}
 
 
+def local_repetitions(text: str, groups: Iterable[object]) -> dict[str, list[dict[str, object]]]:
+    raw_blocks = [part for part in PARAGRAPH_RE.split(text) if part.strip()]
+    blocks: list[str] = []
+    for block in raw_blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if len(lines) > 1 or any(line.startswith(("#", "- ", "* ")) for line in lines):
+            blocks.extend(line for line in lines if not line.startswith("#"))
+        elif lines and not lines[0].startswith("#"):
+            blocks.append(lines[0])
+
+    sentences: list[str] = []
+    sentence_ranges: list[tuple[int, int]] = []
+    for block in blocks:
+        start = len(sentences)
+        sentences.extend(part.strip() for part in SENTENCE_RE.split(block) if part.strip())
+        sentence_ranges.append((start, len(sentences)))
+    sentence_tokens = [tokens(part) for part in sentences]
+    same_sentence_words: list[dict[str, object]] = []
+    adjacent_words: list[dict[str, object]] = []
+    paragraph_words: list[dict[str, object]] = []
+
+    for index, stream in enumerate(sentence_tokens, start=1):
+        counts = Counter(token for token in stream if len(token) > 3 and token not in STOPWORDS)
+        for word, count in counts.items():
+            if count >= 2:
+                same_sentence_words.append({"text": word, "sentence": index, "count": count})
+
+    for start, end in sentence_ranges:
+        for index in range(start, end - 1):
+            left = Counter(token for token in sentence_tokens[index] if len(token) > 3 and token not in STOPWORDS)
+            right = Counter(token for token in sentence_tokens[index + 1] if len(token) > 3 and token not in STOPWORDS)
+            for word in sorted(left.keys() & right.keys()):
+                adjacent_words.append({
+                    "text": word,
+                    "sentences": [index + 1, index + 2],
+                    "count": left[word] + right[word],
+                })
+
+    same_sentence_groups: list[dict[str, object]] = []
+    adjacent_groups: list[dict[str, object]] = []
+    paragraph_groups: list[dict[str, object]] = []
+    paragraphs = blocks
+    for index, paragraph in enumerate(paragraphs, start=1):
+        counts = Counter(token for token in tokens(paragraph) if len(token) > 3 and token not in STOPWORDS)
+        for word, count in counts.items():
+            if count >= 3:
+                paragraph_words.append({"text": word, "paragraph": index, "count": count})
+    for group in groups:
+        label = str(getattr(group, "label"))
+        sentence_counts = [count_group(stream, group) for stream in sentence_tokens]
+        for index, count in enumerate(sentence_counts, start=1):
+            if count >= 2:
+                same_sentence_groups.append({"group": label, "sentence": index, "count": count})
+        for start, end in sentence_ranges:
+            for index in range(start, end - 1):
+                if sentence_counts[index] and sentence_counts[index + 1]:
+                    adjacent_groups.append({
+                        "group": label,
+                        "sentences": [index + 1, index + 2],
+                        "count": sentence_counts[index] + sentence_counts[index + 1],
+                    })
+        for index, paragraph in enumerate(paragraphs, start=1):
+            count = count_group(tokens(paragraph), group)
+            if count >= 3:
+                paragraph_groups.append({"group": label, "paragraph": index, "count": count})
+
+    return {
+        "same_sentence_words": same_sentence_words,
+        "adjacent_words": adjacent_words,
+        "paragraph_words": paragraph_words,
+        "same_sentence_groups": same_sentence_groups,
+        "adjacent_groups": adjacent_groups,
+        "paragraph_groups": paragraph_groups,
+    }
+
+
 def audit(
     groups: list[Group],
     source: str,
@@ -271,6 +351,7 @@ def audit(
     covered_after, _, breadth_after, depth_after = coverage_and_depth(rows, "after")
     target_forms = {form for group in eligible_groups for form in group.forms}
     monoculture = anti_monoculture(source, edited, target_forms)
+    local = local_repetitions(edited, eligible_groups)
 
     return {
         "summary": {
@@ -289,9 +370,16 @@ def audit(
             "yo_symbols": edited.count("\u0451") + edited.count("\u0401"),
             "monoculture_words": len(monoculture["words"]),
             "monoculture_ngrams": len(monoculture["ngrams"]),
+            "same_sentence_repetitions": len(local["same_sentence_groups"]),
+            "adjacent_sentence_repetitions": len(local["adjacent_groups"]),
+            "paragraph_repetitions": len(local["paragraph_groups"]),
+            "same_sentence_word_repetitions": len(local["same_sentence_words"]),
+            "adjacent_sentence_word_repetitions": len(local["adjacent_words"]),
+            "paragraph_word_repetitions": len(local["paragraph_words"]),
         },
         "groups": rows,
         "anti_monoculture": monoculture,
+        "local_repetitions": local,
     }
 
 
@@ -308,6 +396,11 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
         "OVER_MEDIAN={over_median} CLUSTERED={clustered} "
         "MONOCULTURE_WORDS={monoculture_words} "
         "MONOCULTURE_NGRAMS={monoculture_ngrams} YO={yo_symbols}".format(**summary)
+    )
+    print(
+        "LOCAL_REPETITIONS sentence={same_sentence_repetitions} "
+        "adjacent={adjacent_sentence_repetitions} paragraph={paragraph_repetitions} "
+        "words={same_sentence_word_repetitions}/{adjacent_sentence_word_repetitions}/{paragraph_word_repetitions}".format(**summary)
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -345,6 +438,12 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
         print(f"WRAPPER_WORD: {item['text']} {item['before']}->{item['after']}")
     for item in anti["ngrams"][:10]:
         print(f"WRAPPER_NGRAM: {item['text']} {item['before']}->{item['after']}")
+    local = report["local_repetitions"]
+    assert isinstance(local, dict)
+    for item in local["same_sentence_groups"][:10]:
+        print(f"SENTENCE_REPEAT: {item['group']} sentence={item['sentence']} count={item['count']}")
+    for item in local["adjacent_groups"][:10]:
+        print(f"ADJACENT_REPEAT: {item['group']} sentences={item['sentences']} count={item['count']}")
 
 
 def strict_failures(report: dict[str, object]) -> list[str]:
@@ -359,6 +458,18 @@ def strict_failures(report: dict[str, object]) -> list[str]:
         failures.append("есть группы, собранные в одном абзаце")
     if int(summary["monoculture_words"]) or int(summary["monoculture_ngrams"]):
         failures.append("редактура создала повторяющуюся обвязку")
+    if int(summary["same_sentence_repetitions"]):
+        failures.append("целевая группа повторяется в одном предложении")
+    if int(summary["adjacent_sentence_repetitions"]):
+        failures.append("целевая группа повторяется в соседних предложениях")
+    if int(summary["paragraph_repetitions"]):
+        failures.append("целевая группа чрезмерно сконцентрирована в одном абзаце")
+    if int(summary["same_sentence_word_repetitions"]):
+        failures.append("знаменательное слово повторяется в одном предложении")
+    if int(summary["adjacent_sentence_word_repetitions"]):
+        failures.append("знаменательное слово повторяется в соседних предложениях")
+    if int(summary["paragraph_word_repetitions"]):
+        failures.append("знаменательное слово чрезмерно сконцентрировано в одном абзаце")
     if int(summary["covered_before"]) < int(summary["eligible_groups"]) and int(summary["covered_after"]) <= int(summary["covered_before"]):
         failures.append("семантический охват не вырос")
     if float(summary["depth_after"]) < float(summary["depth_before"]):
@@ -386,6 +497,10 @@ def self_test() -> int:
     )
     exclude = {"конфиденциальность", "пароль"}
     report = audit(groups, source, edited, set(), exclude, core_size=2)
+    local_bad = local_repetitions(
+        "Смеситель согласуют со схемой, смеситель устанавливают после замеров. Смеситель подключают после отделки.",
+        [groups[1]],
+    )
     rows = {str(row["group"]): row for row in report["groups"]}
     expected = {"душевой": 4, "смеситель": 3, "керамика": 2, "монтаж": 2, "комплект": 1}
     checks = {
@@ -396,6 +511,10 @@ def self_test() -> int:
         "core_is_distributed": int(rows["душевой"]["paragraphs"]) >= 2 and int(rows["смеситель"]["paragraphs"]) >= 2,
         "breadth_is_complete": report["summary"]["covered_after"] == report["summary"]["eligible_groups"],
         "no_wrapper_monoculture": not report["anti_monoculture"]["words"] and not report["anti_monoculture"]["ngrams"],
+        "same_sentence_repeat_detected": len(local_bad["same_sentence_groups"]) == 1,
+        "adjacent_sentence_repeat_detected": len(local_bad["adjacent_groups"]) == 1,
+        "same_sentence_word_repeat_detected": len(local_bad["same_sentence_words"]) == 1,
+        "adjacent_sentence_word_repeat_detected": len(local_bad["adjacent_words"]) == 1,
     }
     for name, passed in checks.items():
         print(f"{'PASS' if passed else 'FAIL'} {name}")
