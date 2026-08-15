@@ -1,4 +1,4 @@
 interface:
   display_name: "Бриф клиента для SEO-текстов"
-  short_description: "Глубокий бриф для авторов SEO-текстов"
-  default_prompt: "Используй $create-seo-text-client-brief: исследуй сайт через Playwright, подготовь плотный практический бриф для автора и редактора и сохрани его отдельным Google Doc в указанную мной папку Drive."
+  short_description: "Короткий доказательный бриф после глубокого исследования"
+  default_prompt: "Используй $create-seo-text-client-brief: собери данные официального сайта через Playwright, сам проанализируй доказательства, создай короткий постоянный бриф и сохрани его отдельным Google Doc в указанной мной папке Drive."
