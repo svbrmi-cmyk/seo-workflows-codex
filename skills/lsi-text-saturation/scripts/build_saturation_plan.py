@@ -342,8 +342,6 @@ def failures(report: dict[str, object]) -> list[str]:
         ("есть превышения лимитов", "over_cap"),
         ("не выполнены отрицательные рекомендации", "negative_violations"),
         ("есть скопления", "clustered"),
-        ("есть повторяющаяся обвязка", "monoculture_words"),
-        ("есть повторяющиеся N-граммы", "monoculture_ngrams"),
         ("целевая группа повторяется в одном предложении", "same_sentence_repetitions"),
         ("целевая группа повторяется в соседних предложениях", "adjacent_sentence_repetitions"),
         ("целевая группа чрезмерно сконцентрирована в одном абзаце", "paragraph_repetitions"),

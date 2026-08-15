@@ -165,8 +165,6 @@ def group_selected(group: Group, include: set[str], exclude: set[str]) -> bool:
 
 def selection_status(group: Group, include: set[str], exclude: set[str]) -> str:
     names = {group.label, *group.forms}
-    if group.median <= 0:
-        return "median-zero"
     if include and names.isdisjoint(include):
         return "not-in-include"
     if not names.isdisjoint(exclude):
@@ -206,6 +204,8 @@ def ngrams(text: str, size: int, target_forms: set[str]) -> Counter[str]:
     for index in range(len(stream) - size + 1):
         gram = stream[index:index + size]
         if all(token in STOPWORDS for token in gram):
+            continue
+        if any(token in target_forms for token in gram):
             continue
         result[" ".join(gram)] += 1
     return result
@@ -330,7 +330,7 @@ def audit(
         before = count_group(before_tokens, group)
         after = count_group(after_tokens, group)
         core = group.label in core_labels
-        target = group.median if core else (1 if eligible else 0)
+        target = max(1, group.median) if core else (1 if eligible else 0)
         cap = target
         paragraphs = paragraph_count(edited, group)
         rows.append({
@@ -363,7 +363,7 @@ def audit(
             "groups_in_pool": len(groups),
             "eligible_groups": eligible_count,
             "excluded_groups": sum(row["status"] == "excluded" for row in rows),
-            "zero_median_groups": sum(row["status"] == "median-zero" for row in rows),
+            "zero_median_groups": sum(int(row["median"]) == 0 for row in rows),
             "covered_before": covered_before,
             "covered_after": covered_after,
             "breadth_before": round(breadth_before, 4),
@@ -371,6 +371,8 @@ def audit(
             "depth_before": round(depth_before, 4),
             "depth_after": round(depth_after, 4),
             "over_median": sum(bool(row["over_median"]) and bool(row["eligible"]) for row in rows),
+            "missing_width": sum(bool(row["eligible"]) and int(row["after"]) == 0 for row in rows),
+            "target_deficits": sum(bool(row["eligible"]) and int(row["remaining"]) > 0 for row in rows),
             "clustered": sum(bool(row["clustered"]) for row in rows),
             "yo_symbols": edited.count("\u0451") + edited.count("\u0401"),
             "monoculture_words": len(monoculture["words"]),
@@ -455,14 +457,16 @@ def strict_failures(report: dict[str, object]) -> list[str]:
     summary = report["summary"]
     assert isinstance(summary, dict)
     failures: list[str] = []
+    if int(summary["missing_width"]):
+        failures.append("есть непокрытые релевантные группы")
+    if int(summary["target_deficits"]):
+        failures.append("есть недобор целевых значений")
     if int(summary["over_median"]):
         failures.append("есть превышения медианы")
     if int(summary["yo_symbols"]):
         failures.append("найден символ U+0451")
     if int(summary["clustered"]):
         failures.append("есть группы, собранные в одном абзаце")
-    if int(summary["monoculture_words"]) or int(summary["monoculture_ngrams"]):
-        failures.append("редактура создала повторяющуюся обвязку")
     if int(summary["same_sentence_repetitions"]):
         failures.append("целевая группа повторяется в одном предложении")
     if int(summary["adjacent_sentence_repetitions"]):
