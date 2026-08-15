@@ -187,9 +187,9 @@ def coverage_and_depth(rows: list[dict[str, object]], side: str) -> tuple[int, i
     eligible = [row for row in rows if row["eligible"]]
     covered = sum(int(row[side]) > 0 for row in eligible)
     breadth = covered / len(eligible) if eligible else 0.0
-    total_median = sum(int(row["median"]) for row in eligible)
-    depth_numerator = sum(min(int(row[side]), int(row["median"])) for row in eligible)
-    depth = depth_numerator / total_median if total_median else 0.0
+    total_target = sum(int(row["target"]) for row in eligible)
+    depth_numerator = sum(min(int(row[side]), int(row["target"])) for row in eligible)
+    depth = depth_numerator / total_target if total_target else 0.0
     return covered, len(eligible), breadth, depth
 
 
@@ -320,8 +320,8 @@ def audit(
     before_tokens = tokens(source)
     after_tokens = tokens(edited)
     eligible_groups = [group for group in groups if group_selected(group, include, exclude)]
-    ranked = sorted(eligible_groups, key=lambda group: (-group.median, group.row))
-    core_labels = {group.label for group in ranked[:core_size]}
+    ordered = sorted(eligible_groups, key=lambda group: group.row)
+    core_labels = {group.label for group in ordered[:core_size]}
 
     rows: list[dict[str, object]] = []
     for group in groups:
@@ -329,20 +329,25 @@ def audit(
         eligible = status == "eligible"
         before = count_group(before_tokens, group)
         after = count_group(after_tokens, group)
+        core = group.label in core_labels
+        target = group.median if core else (1 if eligible else 0)
+        cap = target
         paragraphs = paragraph_count(edited, group)
         rows.append({
             "row": group.row,
             "group": group.label,
             "median": group.median,
+            "target": target,
+            "cap": cap,
             "before": before,
             "after": after,
             "added": after - before,
-            "remaining": max(0, group.median - after),
+            "remaining": max(0, target - after),
             "eligible": eligible,
             "status": status,
-            "core": group.label in core_labels,
+            "core": core,
             "paragraphs": paragraphs,
-            "over_median": after > group.median,
+            "over_median": eligible and after > cap,
             "clustered": eligible and after >= 2 and paragraphs < 2,
             "forms": list(group.forms),
         })
@@ -411,7 +416,7 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
         if row["core"]:
             print(
                 f"CORE: {row['group']} "
-                f"{row['before']}->{row['after']}/{row['median']} paragraphs={row['paragraphs']}"
+                f"{row['before']}->{row['after']}/{row['target']} paragraphs={row['paragraphs']}"
             )
     problems = [
         row for row in groups
@@ -425,7 +430,7 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
             flags.append("CLUSTERED")
         print(
             f"{'+'.join(flags)}: {row['group']} "
-            f"{row['before']}->{row['after']} median={row['median']} paragraphs={row['paragraphs']}"
+            f"{row['before']}->{row['after']} target={row['target']} paragraphs={row['paragraphs']}"
         )
 
     missing = [row["group"] for row in groups if row["eligible"] and int(row["after"]) == 0]
@@ -491,9 +496,9 @@ def self_test() -> int:
     edited = (
         "Душевая зона включает комплект из керамики.\n\n"
         "Смеситель рассчитан на аккуратный монтаж.\n\n"
-        "Душевой уголок дополняют керамические детали.\n\n"
+        "Душевой уголок дополняют защитные детали.\n\n"
         "Для душевой ниши выбран смеситель.\n\n"
-        "Душевой блок и смеситель упрощают порядок монтажа."
+        "Душевой блок и смеситель упрощают порядок установки."
     )
     exclude = {"конфиденциальность", "пароль"}
     report = audit(groups, source, edited, set(), exclude, core_size=2)
@@ -502,7 +507,7 @@ def self_test() -> int:
         [groups[1]],
     )
     rows = {str(row["group"]): row for row in report["groups"]}
-    expected = {"душевой": 4, "смеситель": 3, "керамика": 2, "монтаж": 2, "комплект": 1}
+    expected = {"душевой": 4, "смеситель": 3, "керамика": 1, "монтаж": 1, "комплект": 1}
     checks = {
         "core_reaches_median": all(int(rows[name]["after"]) == value for name, value in expected.items()),
         "no_group_over_median": all(not bool(row["over_median"]) for row in rows.values()),
@@ -527,7 +532,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--text", type=Path, help="Отредактированный текст UTF-8")
     parser.add_argument("--lsi", type=Path, help="Excel-таблица LSI")
     parser.add_argument("--limit", type=int, default=150, help="Число первых групп для охвата")
-    parser.add_argument("--core-size", type=int, default=15, help="Число верхних групп ядра")
+    parser.add_argument("--core-size", type=int, default=12, choices=range(10, 13), help="Число первых групп ядра: 10–12")
     parser.add_argument("--include", type=Path, help="Белый список релевантных групп или форм")
     parser.add_argument("--exclude", type=Path, help="Список нерелевантных групп или форм")
     parser.add_argument("--json-output", type=Path, help="Сохранить полный аудит JSON")
