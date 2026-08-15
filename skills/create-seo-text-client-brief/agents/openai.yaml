@@ -1,0 +1,4 @@
+interface:
+  display_name: "Бриф клиента для SEO-текстов"
+  short_description: "Доказательный бриф для точных SEO-текстов"
+  default_prompt: "Используй $create-seo-text-client-brief, чтобы исследовать официальный сайт клиента и сохранить проверенный редакторско-коммерческий бриф в Google Docs."
