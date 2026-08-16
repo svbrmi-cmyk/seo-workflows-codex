@@ -535,7 +535,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=Path, help="Исходный текст UTF-8")
     parser.add_argument("--text", type=Path, help="Отредактированный текст UTF-8")
     parser.add_argument("--lsi", type=Path, help="Excel-таблица LSI")
-    parser.add_argument("--limit", type=int, default=150, help="Число первых групп для охвата")
+    parser.add_argument("--limit", type=int, default=200, help="Число первых групп для смыслового отбора и внутреннего покрытия")
     parser.add_argument("--core-size", type=int, default=12, choices=range(10, 13), help="Число первых групп ядра: 10–12")
     parser.add_argument("--include", type=Path, help="Белый список релевантных групп или форм")
     parser.add_argument("--exclude", type=Path, help="Список нерелевантных групп или форм")
