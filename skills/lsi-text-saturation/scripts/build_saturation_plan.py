@@ -54,7 +54,7 @@ class PlanGroup:
         if self.recommendation < 0:
             return 1
         if self.median_seen:
-            return self.median
+            return max(1, self.median)
         return self.minimum
 
     @property
@@ -62,7 +62,7 @@ class PlanGroup:
         if self.recommendation < 0:
             return 1
         if self.median_seen:
-            return self.median
+            return max(1, self.median)
         if self.maximum > 0:
             return self.maximum
         return self.target
@@ -203,8 +203,6 @@ def state(group: PlanGroup, exclude: set[str]) -> str:
         return "excluded"
     if group.negative:
         return "negative"
-    if group.median_seen and group.median == 0:
-        return "median-zero"
     if group.target > 0:
         return "positive"
     return "ignored"
@@ -341,6 +339,8 @@ def failures(report: dict[str, object]) -> list[str]:
         ("есть недобор положительных целей", "target_deficits"),
         ("есть превышения лимитов", "over_cap"),
         ("не выполнены отрицательные рекомендации", "negative_violations"),
+        ("собственный счетчик не совпадает с колонкой Повторы", "count_mismatches"),
+        ("есть ошибки объединения или расхождения входных таблиц", "input_warnings"),
         ("есть скопления", "clustered"),
         ("целевая группа повторяется в одном предложении", "same_sentence_repetitions"),
         ("целевая группа повторяется в соседних предложениях", "adjacent_sentence_repetitions"),
@@ -398,6 +398,7 @@ def self_test() -> int:
         2,
         -2,
     )
+    zero_median_relevant = PlanGroup(9, "сифон", ("сифон", "сифона"), 0, True, 0, 0, 0, 0)
     checks = {
         "width_complete": summary["missing_width"] == 0,
         "targets_met": summary["target_deficits"] == 0,
@@ -409,6 +410,9 @@ def self_test() -> int:
         "all_word_forms_counted": morphology_count == 3,
         "negative_keeps_one_occurrence": negative_with_median.target == 1,
         "negative_cap_is_one": negative_with_median.cap == 1,
+        "zero_median_relevant_target_is_one": zero_median_relevant.target == 1,
+        "zero_median_relevant_cap_is_one": zero_median_relevant.cap == 1,
+        "zero_median_relevant_is_positive": state(zero_median_relevant, set()) == "positive",
     }
     for name, passed in checks.items():
         print(f"{'PASS' if passed else 'FAIL'} {name}")
@@ -445,6 +449,7 @@ def main() -> int:
         args.text.read_text(encoding="utf-8-sig"),
         read_terms(args.exclude),
     )
+    report["summary"]["input_warnings"] = len(warnings)
     render(report, warnings)
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)

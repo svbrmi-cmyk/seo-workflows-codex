@@ -42,6 +42,17 @@ def audit_item(label: str, actual: int, minimum: int, maximum: int | None) -> di
     }
 
 
+def bounds(rule: dict[str, object], label: str) -> tuple[int, int | None]:
+    minimum = int(rule.get("min", 0))
+    raw_maximum = rule.get("max")
+    maximum = None if raw_maximum is None else int(raw_maximum)
+    if minimum < 0 or (maximum is not None and maximum < 0):
+        raise SystemExit(f"Отрицательная граница в правиле: {label}")
+    if maximum is not None and minimum > maximum:
+        raise SystemExit(f"Минимум выше максимума в правиле: {label}")
+    return minimum, maximum
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", type=Path, required=True)
@@ -57,21 +68,43 @@ def main() -> int:
     if not rules.get("exact_phrases") and not rules.get("groups"):
         raise SystemExit("Файл правил пуст: нет exact_phrases или groups")
     results: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    seen_group_forms: list[tuple[str, set[str]]] = []
 
     for rule in rules.get("exact_phrases", []):
         phrase = str(rule["phrase"])
+        key = ("exact_phrase", normalize(phrase))
+        if not key[1] or key in seen:
+            raise SystemExit(f"Пустое или дублирующееся правило точной фразы: {phrase}")
+        seen.add(key)
         actual = count_phrase(text_tokens, phrase)
-        maximum = rule.get("max")
-        item = audit_item(phrase, actual, int(rule.get("min", 0)), None if maximum is None else int(maximum))
+        minimum, maximum = bounds(rule, phrase)
+        item = audit_item(phrase, actual, minimum, maximum)
         item["kind"] = "exact_phrase"
         results.append(item)
 
     for rule in rules.get("groups", []):
         label = str(rule["label"])
         forms = [str(form) for form in rule.get("forms", [label])]
+        normalized_forms = [normalize(form) for form in forms]
+        if not normalize(label) or not normalized_forms or any(len(form.split()) != 1 for form in normalized_forms):
+            raise SystemExit(f"Группа должна содержать непустые однословные словоформы: {label}")
+        signature = "|".join(sorted(set(normalized_forms)))
+        key = ("wordform_group", signature)
+        if key in seen:
+            raise SystemExit(f"Дублирующееся правило группы словоформ: {label}")
+        form_set = set(normalized_forms)
+        overlap = next(((old_label, form_set & old_forms) for old_label, old_forms in seen_group_forms if form_set & old_forms), None)
+        if overlap:
+            old_label, shared = overlap
+            raise SystemExit(
+                f"Пересекающиеся группы словоформ: {old_label} / {label}; формы: {', '.join(sorted(shared))}"
+            )
+        seen.add(key)
+        seen_group_forms.append((label, form_set))
         actual = count_group(text_tokens, forms)
-        maximum = rule.get("max")
-        item = audit_item(label, actual, int(rule.get("min", 0)), None if maximum is None else int(maximum))
+        minimum, maximum = bounds(rule, label)
+        item = audit_item(label, actual, minimum, maximum)
         item["kind"] = "wordform_group"
         item["forms"] = forms
         results.append(item)

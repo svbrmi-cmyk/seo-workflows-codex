@@ -165,16 +165,34 @@ def group_selected(group: Group, include: set[str], exclude: set[str]) -> bool:
 
 def selection_status(group: Group, include: set[str], exclude: set[str]) -> str:
     names = {group.label, *group.forms}
-    if include and names.isdisjoint(include):
-        return "not-in-include"
     if not names.isdisjoint(exclude):
         return "excluded"
+    if include and names.isdisjoint(include):
+        return "unclassified"
     return "eligible"
 
 
 def count_group(text_tokens: list[str], group: Group) -> int:
     form_set = set(group.forms)
     return sum(1 for token in text_tokens if token in form_set)
+
+
+def decision_integrity(groups: list[Group], include: set[str], exclude: set[str]) -> dict[str, int]:
+    known = {name for group in groups for name in {group.label, *group.forms}}
+    unclassified = 0
+    conflicts = 0
+    for group in groups:
+        names = {group.label, *group.forms}
+        in_include = not names.isdisjoint(include)
+        in_exclude = not names.isdisjoint(exclude)
+        unclassified += not in_include and not in_exclude
+        conflicts += in_include and in_exclude
+    return {
+        "decision_unclassified": unclassified,
+        "decision_conflicts": conflicts,
+        "unknown_include_terms": len(include - known),
+        "unknown_exclude_terms": len(exclude - known),
+    }
 
 
 def paragraph_count(text: str, group: Group) -> int:
@@ -363,6 +381,7 @@ def audit(
             "groups_in_pool": len(groups),
             "eligible_groups": eligible_count,
             "excluded_groups": sum(row["status"] == "excluded" for row in rows),
+            "unclassified_groups": sum(row["status"] == "unclassified" for row in rows),
             "zero_median_groups": sum(int(row["median"]) == 0 for row in rows),
             "covered_before": covered_before,
             "covered_after": covered_after,
@@ -408,6 +427,10 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
         "LOCAL_REPETITIONS sentence={same_sentence_repetitions} "
         "adjacent={adjacent_sentence_repetitions} paragraph={paragraph_repetitions} "
         "words={same_sentence_word_repetitions}/{adjacent_sentence_word_repetitions}/{paragraph_word_repetitions}".format(**summary)
+    )
+    print(
+        "DECISIONS unclassified={decision_unclassified} conflicts={decision_conflicts} "
+        "unknown={unknown_include_terms}/{unknown_exclude_terms} input_warnings={input_warnings}".format(**summary)
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -463,6 +486,14 @@ def strict_failures(report: dict[str, object]) -> list[str]:
         failures.append("есть недобор целевых значений")
     if int(summary["over_median"]):
         failures.append("есть превышения медианы")
+    if int(summary.get("input_warnings", 0)):
+        failures.append("есть ошибки структуры LSI-таблицы")
+    if int(summary.get("decision_unclassified", 0)):
+        failures.append("не для всех групп записано решение")
+    if int(summary.get("decision_conflicts", 0)):
+        failures.append("группа одновременно включена и исключена")
+    if int(summary.get("unknown_include_terms", 0)) or int(summary.get("unknown_exclude_terms", 0)):
+        failures.append("файлы решений содержат неизвестные группы или формы")
     if int(summary["yo_symbols"]):
         failures.append("найден символ U+0451")
     if int(summary["clustered"]):
@@ -556,11 +587,15 @@ def main() -> int:
         raise SystemExit("--limit и --core-size должны быть положительными")
 
     groups, warnings = read_groups(args.lsi, args.limit)
+    if args.strict and (args.include is None or args.exclude is None):
+        raise SystemExit("В строгом режиме обязательны оба файла решений: --include и --exclude")
     source = args.source.read_text(encoding="utf-8-sig")
     edited = args.text.read_text(encoding="utf-8-sig")
     include = read_terms(args.include)
     exclude = read_terms(args.exclude)
     report = audit(groups, source, edited, include, exclude, args.core_size)
+    report["summary"]["input_warnings"] = len(warnings)
+    report["summary"].update(decision_integrity(groups, include, exclude))
     render(report, warnings)
 
     if args.json_output:
