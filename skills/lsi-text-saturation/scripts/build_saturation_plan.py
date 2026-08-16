@@ -52,7 +52,7 @@ class PlanGroup:
     @property
     def target(self) -> int:
         if self.recommendation < 0:
-            return 0
+            return 1
         if self.median_seen:
             return self.median
         return self.minimum
@@ -60,7 +60,7 @@ class PlanGroup:
     @property
     def cap(self) -> int:
         if self.recommendation < 0:
-            return self.maximum if self.maximum > 0 else 0
+            return 1
         if self.median_seen:
             return self.median
         if self.maximum > 0:
@@ -246,7 +246,7 @@ def audit_plan(
             "covered_after": group_state == "positive" and after > 0,
             "target_met": group_state != "positive" or after >= target,
             "over_cap": group_state in {"positive", "negative"} and after > cap,
-            "negative_met": group_state != "negative" or after <= cap,
+            "negative_met": group_state != "negative" or target <= after <= cap,
             "paragraphs": paragraph_count(edited, group),
             "clustered": group_state == "positive" and after >= 2 and paragraph_count(edited, group) < 2,
         })
@@ -363,6 +363,7 @@ def self_test() -> int:
     ]
     source = "Удобный товар. Удобный выбор. Удобный вариант."
     edited = (
+        "Удобный доступ предусмотрен рядом.\n\n"
         "Душевая зона дополнена керамикой.\n\n"
         "Смеситель установлен рядом.\n\n"
         "Душевой узел работает стабильно.\n\n"
@@ -401,13 +402,13 @@ def self_test() -> int:
         "width_complete": summary["missing_width"] == 0,
         "targets_met": summary["target_deficits"] == 0,
         "caps_respected": summary["over_cap"] == 0,
-        "negative_removed": summary["negative_violations"] == 0,
+        "negative_reduced_to_one": summary["negative_violations"] == 0,
         "noise_excluded": summary["excluded_groups"] == 1,
         "distributed": summary["clustered"] == 0,
         "no_monoculture": summary["monoculture_words"] == 0 and summary["monoculture_ngrams"] == 0,
         "all_word_forms_counted": morphology_count == 3,
-        "negative_overrides_median_target": negative_with_median.target == 0,
-        "negative_uses_reduction_cap": negative_with_median.cap == 2,
+        "negative_keeps_one_occurrence": negative_with_median.target == 1,
+        "negative_cap_is_one": negative_with_median.cap == 1,
     }
     for name, passed in checks.items():
         print(f"{'PASS' if passed else 'FAIL'} {name}")
