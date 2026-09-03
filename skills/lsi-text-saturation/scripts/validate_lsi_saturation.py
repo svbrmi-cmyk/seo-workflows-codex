@@ -57,6 +57,33 @@ def tokens(text: str) -> list[str]:
     return [normalize(match.group(0)) for match in TOKEN_RE.finditer(text)]
 
 
+def structure_metrics(text: str) -> dict[str, object]:
+    paragraphs = [part.strip() for part in PARAGRAPH_RE.split(text) if part.strip()]
+    sentences = [
+        sentence.strip()
+        for paragraph in paragraphs
+        for sentence in SENTENCE_RE.split(paragraph)
+        if sentence.strip() and re.search(r"[.!?](?:[\"'»)]*)$", sentence.strip())
+    ]
+    headings = [
+        line.strip()
+        for line in text.splitlines()
+        if re.match(r"^\s{0,3}#{1,6}\s+\S", line)
+    ]
+    list_items = [
+        line for line in text.splitlines()
+        if re.match(r"^\s*(?:[-*+]|\d+[.)])\s+", line)
+    ]
+    return {
+        "headings": headings,
+        "heading_count": len(headings),
+        "paragraph_count": len(paragraphs),
+        "sentence_count": len(sentences),
+        "list_item_count": len(list_items),
+        "word_count": len(tokens(text)),
+    }
+
+
 def header_map(row: Iterable[object]) -> dict[str, int]:
     return {normalize(value): index for index, value in enumerate(row) if value is not None}
 
@@ -389,6 +416,8 @@ def audit(
     target_forms = {form for group in eligible_groups for form in group.forms}
     monoculture = anti_monoculture(source, edited, target_forms)
     local = local_repetitions(edited, eligible_groups)
+    structure_before = structure_metrics(source)
+    structure_after = structure_metrics(edited)
 
     return {
         "summary": {
@@ -416,7 +445,15 @@ def audit(
             "same_sentence_word_repetitions": len(local["same_sentence_words"]),
             "adjacent_sentence_word_repetitions": len(local["adjacent_words"]),
             "paragraph_word_repetitions": len(local["paragraph_words"]),
+            "headings_changed": structure_before["headings"] != structure_after["headings"],
+            "paragraph_count_changed": structure_before["paragraph_count"] != structure_after["paragraph_count"],
+            "sentence_count_changed": structure_before["sentence_count"] != structure_after["sentence_count"],
+            "list_item_count_changed": structure_before["list_item_count"] != structure_after["list_item_count"],
+            "word_count_increased": structure_after["word_count"] > structure_before["word_count"],
+            "word_count_before": structure_before["word_count"],
+            "word_count_after": structure_after["word_count"],
         },
+        "preservation": {"before": structure_before, "after": structure_after},
         "groups": rows,
         "anti_monoculture": monoculture,
         "local_repetitions": local,
@@ -449,6 +486,11 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
     print(
         'COVERAGE_MIN={min_coverage:.0%} RAW_AFTER={raw_coverage_after:.1%} '
         'CORE_GROUPS={core_groups} CORE_DEFICITS={core_deficits}'.format(**summary)
+    )
+    print(
+        'PRESERVATION words={word_count_before}->{word_count_after} '
+        'headings={headings_changed} paragraphs={paragraph_count_changed} '
+        'sentences={sentence_count_changed} lists={list_item_count_changed}'.format(**summary)
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -553,6 +595,11 @@ def strict_failures_v2(report: dict[str, object]) -> list[str]:
         ('same_sentence_repetitions', 'целевая группа повторяется в одном предложении'),
         ('adjacent_sentence_repetitions', 'целевая группа повторяется в соседних предложениях'),
         ('paragraph_repetitions', 'целевая группа чрезмерно сконцентрирована в абзаце'),
+        ('headings_changed', 'изменены заголовки или их порядок'),
+        ('paragraph_count_changed', 'изменено количество абзацев'),
+        ('sentence_count_changed', 'изменено количество предложений'),
+        ('list_item_count_changed', 'изменено количество пунктов списков'),
+        ('word_count_increased', 'итоговый текст длиннее исходного'),
     )
     failures = [message for key, message in checks if summary.get(key)]
     core_count = int(summary.get('core_groups', 0))
@@ -599,6 +646,9 @@ def self_test() -> int:
         "adjacent_sentence_repeat_detected": len(local_bad["adjacent_groups"]) == 1,
         "same_sentence_word_repeat_detected": len(local_bad["same_sentence_words"]) == 1,
         "adjacent_sentence_word_repeat_detected": len(local_bad["adjacent_words"]) == 1,
+        "paragraph_growth_detected": bool(report["summary"]["paragraph_count_changed"]),
+        "sentence_growth_detected": bool(report["summary"]["sentence_count_changed"]),
+        "word_growth_detected": bool(report["summary"]["word_count_increased"]),
     }
     for name, passed in checks.items():
         print(f"{'PASS' if passed else 'FAIL'} {name}")
