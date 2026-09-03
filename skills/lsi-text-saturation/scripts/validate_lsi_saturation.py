@@ -334,12 +334,20 @@ def audit(
     include: set[str],
     exclude: set[str],
     core_size: int,
+    core_terms: set[str] | None = None,
 ) -> dict[str, object]:
     before_tokens = tokens(source)
     after_tokens = tokens(edited)
     eligible_groups = [group for group in groups if group_selected(group, include, exclude)]
     ordered = sorted(eligible_groups, key=lambda group: group.row)
-    core_labels = {group.label for group in ordered[:core_size]}
+    if core_terms:
+        core_labels = {
+            group.label
+            for group in ordered
+            if not {group.label, *group.forms}.isdisjoint(core_terms)
+        }
+    else:
+        core_labels = {group.label for group in ordered[:core_size]}
 
     rows: list[dict[str, object]] = []
     for group in groups:
@@ -349,7 +357,8 @@ def audit(
         after = count_group(after_tokens, group)
         core = group.label in core_labels
         target = max(1, group.median) if core else (1 if eligible else 0)
-        cap = target
+        minimum = max(1, group.median - 2) if core else (1 if eligible else 0)
+        cap = max(1, group.median) if core else (2 if eligible else 0)
         paragraphs = paragraph_count(edited, group)
         rows.append({
             "row": group.row,
@@ -372,6 +381,11 @@ def audit(
 
     covered_before, eligible_count, breadth_before, depth_before = coverage_and_depth(rows, "before")
     covered_after, _, breadth_after, depth_after = coverage_and_depth(rows, "after")
+    for row in rows:
+        minimum = max(1, int(row['median']) - 2) if row['core'] else (1 if row['eligible'] else 0)
+        row['minimum'] = minimum
+        row['remaining'] = max(0, minimum - int(row['after']))
+
     target_forms = {form for group in eligible_groups for form in group.forms}
     monoculture = anti_monoculture(source, edited, target_forms)
     local = local_repetitions(edited, eligible_groups)
@@ -432,6 +446,10 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
         "DECISIONS unclassified={decision_unclassified} conflicts={decision_conflicts} "
         "unknown={unknown_include_terms}/{unknown_exclude_terms} input_warnings={input_warnings}".format(**summary)
     )
+    print(
+        'COVERAGE_MIN={min_coverage:.0%} RAW_AFTER={raw_coverage_after:.1%} '
+        'CORE_GROUPS={core_groups} CORE_DEFICITS={core_deficits}'.format(**summary)
+    )
     for warning in warnings:
         print(f"WARNING: {warning}")
 
@@ -477,6 +495,7 @@ def render(report: dict[str, object], warnings: list[str]) -> None:
 
 
 def strict_failures(report: dict[str, object]) -> list[str]:
+    return strict_failures_v2(report)
     summary = report["summary"]
     assert isinstance(summary, dict)
     failures: list[str] = []
@@ -514,6 +533,31 @@ def strict_failures(report: dict[str, object]) -> list[str]:
         failures.append("семантический охват не вырос")
     if float(summary["depth_after"]) < float(summary["depth_before"]):
         failures.append("семантическая глубина снизилась")
+    return failures
+
+
+def strict_failures_v2(report: dict[str, object]) -> list[str]:
+    summary = report['summary']
+    assert isinstance(summary, dict)
+    checks = (
+        ('below_min_coverage', 'покрытие релевантных групп ниже заданного порога'),
+        ('core_deficits', 'ядро ниже допустимой границы медиана минус 2'),
+        ('over_median', 'есть превышения: ядро выше медианы или остальные группы выше двух'),
+        ('input_warnings', 'есть ошибки структуры LSI-таблицы'),
+        ('decision_unclassified', 'не для всех групп записано решение'),
+        ('decision_conflicts', 'группа одновременно включена и исключена'),
+        ('unknown_include_terms', 'список релевантных содержит неизвестные группы'),
+        ('unknown_exclude_terms', 'список исключений содержит неизвестные группы'),
+        ('core_unknown_terms', 'список ядра содержит неизвестные группы'),
+        ('core_not_relevant', 'ядро не является подмножеством релевантных групп'),
+        ('same_sentence_repetitions', 'целевая группа повторяется в одном предложении'),
+        ('adjacent_sentence_repetitions', 'целевая группа повторяется в соседних предложениях'),
+        ('paragraph_repetitions', 'целевая группа чрезмерно сконцентрирована в абзаце'),
+    )
+    failures = [message for key, message in checks if summary.get(key)]
+    core_count = int(summary.get('core_groups', 0))
+    if not 10 <= core_count <= 15:
+        failures.append('в ядре должно быть от 10 до 15 групп')
     return failures
 
 
@@ -566,13 +610,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=Path, help="Исходный текст UTF-8")
     parser.add_argument("--text", type=Path, help="Отредактированный текст UTF-8")
     parser.add_argument("--lsi", type=Path, help="Excel-таблица LSI")
-    parser.add_argument("--limit", type=int, default=200, help="Число первых групп для смыслового отбора и внутреннего покрытия")
-    parser.add_argument("--core-size", type=int, default=12, choices=range(10, 13), help="Число первых групп ядра: 10–12")
+    parser.add_argument('--limit', type=int, default=150, help='Число первых групп для смыслового отбора и покрытия')
+    parser.add_argument('--core-size', type=int, default=15, choices=range(10, 16), help='Резервный размер ядра: 10–15')
     parser.add_argument("--include", type=Path, help="Белый список релевантных групп или форм")
     parser.add_argument("--exclude", type=Path, help="Список нерелевантных групп или форм")
     parser.add_argument("--json-output", type=Path, help="Сохранить полный аудит JSON")
     parser.add_argument("--strict", action="store_true", help="Вернуть ненулевой код при жестких нарушениях")
     parser.add_argument("--self-test", action="store_true", help="Запустить встроенный контрольный тест")
+    parser.add_argument('--core', type=Path, help='Список 10–15 продуктовых или брендовых групп ядра')
+    parser.add_argument('--min-coverage', type=float, default=0.70, help='Минимальное покрытие релевантных групп')
+    parser.set_defaults(limit=150, core_size=15)
     return parser.parse_args()
 
 
@@ -591,11 +638,31 @@ def main() -> int:
         raise SystemExit("В строгом режиме обязательны оба файла решений: --include и --exclude")
     source = args.source.read_text(encoding="utf-8-sig")
     edited = args.text.read_text(encoding="utf-8-sig")
+    if args.strict and args.core is None:
+        raise SystemExit('В строгом режиме дополнительно обязателен --core')
+    if not 0 < args.min_coverage <= 1:
+        raise SystemExit('--min-coverage должен быть в диапазоне (0, 1]')
+
     include = read_terms(args.include)
     exclude = read_terms(args.exclude)
-    report = audit(groups, source, edited, include, exclude, args.core_size)
+    core = read_terms(args.core)
+    report = audit(groups, source, edited, include, exclude, args.core_size, core)
     report["summary"]["input_warnings"] = len(warnings)
     report["summary"].update(decision_integrity(groups, include, exclude))
+    known = {name for group in groups for name in {group.label, *group.forms}}
+    core_groups = [
+        group for group in groups
+        if not {group.label, *group.forms}.isdisjoint(core)
+    ]
+    summary = report['summary']
+    rows = report['groups']
+    summary['core_groups'] = len(core_groups)
+    summary['core_unknown_terms'] = len(core - known)
+    summary['core_not_relevant'] = sum(not group_selected(group, include, exclude) for group in core_groups)
+    summary['core_deficits'] = sum(row['core'] and int(row['remaining']) > 0 for row in rows)
+    summary['min_coverage'] = args.min_coverage
+    summary['raw_coverage_after'] = round(int(summary['covered_after']) / len(groups), 4) if groups else 0.0
+    summary['below_min_coverage'] = float(summary['raw_coverage_after']) < args.min_coverage
     render(report, warnings)
 
     if args.json_output:
@@ -605,7 +672,7 @@ def main() -> int:
             encoding="utf-8",
         )
 
-    failures = strict_failures(report)
+    failures = strict_failures_v2(report)
     if args.strict and failures:
         print("STRICT_FAIL: " + "; ".join(failures), file=sys.stderr)
         return 2
