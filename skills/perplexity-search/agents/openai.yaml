@@ -1,0 +1,4 @@
+interface:
+  display_name: "Поиск через Perplexity"
+  short_description: "Доказательный веб-поиск через Perplexity API"
+  default_prompt: "Используй $perplexity-search для поиска актуальных источников по моей теме."
