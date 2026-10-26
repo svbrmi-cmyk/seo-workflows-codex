@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.zip
+.env
+.env.*
+.venv/
+texts/
+outputs/

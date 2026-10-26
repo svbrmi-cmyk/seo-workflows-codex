@@ -1,0 +1,4 @@
+interface:
+  display_name: "Описания карточек товаров"
+  short_description: "Описания товаров по табличным данным"
+  default_prompt: "Use $product-card-descriptions to create verified product-card descriptions from my spreadsheet."

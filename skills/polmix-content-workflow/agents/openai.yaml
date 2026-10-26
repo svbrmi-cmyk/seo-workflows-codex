@@ -1,0 +1,6 @@
+interface:
+  display_name: "Polmix n8n Content"
+  short_description: "Operate the local Polmix text workflow"
+  default_prompt: "Use $polmix-content-workflow to check the local generator safely."
+policy:
+  allow_implicit_invocation: true

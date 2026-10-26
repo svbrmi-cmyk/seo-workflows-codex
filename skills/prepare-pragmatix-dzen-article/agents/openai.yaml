@@ -1,0 +1,14 @@
+interface:
+  display_name: Подготовка статьи Pragmatix для Дзена
+  short_description: Готовит статьи Pragmatix для публикации в Дзене
+  default_prompt: Используй $prepare-pragmatix-dzen-article, чтобы подготовить эту
+    статью Pragmatix для публикации в Дзене.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

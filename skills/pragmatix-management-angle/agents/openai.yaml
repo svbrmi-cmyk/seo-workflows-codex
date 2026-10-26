@@ -1,0 +1,14 @@
+interface:
+  display_name: Управленческий угол Pragmatix
+  short_description: Заголовки и вступления для материалов Pragmatix
+  default_prompt: Используй $pragmatix-management-angle, чтобы выбрать управленческий
+    угол, заголовок и вступление для материала Pragmatix.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
