@@ -8,7 +8,7 @@ The reusable skills formerly stored in `svbrmi-cmyk/codex-workspace` and
   The complementary research matrix and business-value guidance from
   `chat-gpt-work` are retained in that folder.
 - The `platform-content-strategy` version from `newclone` is retained.
-  The older backup variant remains available in the source repository history.
+  The older backup variant was excluded as superseded.
 - `analyze-text-wordstat-semantics` differed locally only in line endings.
 - The canonical `use-grsai-text` wording follows the existing SEO library.
 - Extra frontmatter fields in five imported skills were preserved under `metadata`.

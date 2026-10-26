@@ -28,7 +28,7 @@ These commands only change the Docker container lifecycle. They do not activate,
 From the installed skill directory, Codex can run:
 
 ```powershell
-.\scripts\status.ps1 -KitRoot "C:\path\to\polmix-n8n-codex-kit"
+.\scripts\status.ps1 -KitRoot "D:\CODEX\n8n-projects\polmix-n8n-codex-kit"
 ```
 
 Report the returned safe JSON fields. Do not replace the helper with raw database or credential queries.
@@ -39,7 +39,7 @@ Proceed only when the current user request explicitly authorizes generation afte
 
 ```powershell
 .\scripts\run-approved-batch.ps1 `
-  -KitRoot "C:\path\to\polmix-n8n-codex-kit" `
+  -KitRoot "D:\CODEX\n8n-projects\polmix-n8n-codex-kit" `
   -Count 10 `
   -StartRow 12 `
   -Authorized
