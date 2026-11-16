@@ -1,0 +1,13 @@
+scratch/
+.env
+.env.*
+credentials*
+raw_materials/*.mp4
+raw_materials/*.mov
+raw_materials/*.mkv
+raw_materials/*.avi
+raw_materials/*.webm
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(~/.ssh/**)",
+      "Read(./**/credentials*)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(git push --force:*)"
+    ],
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "Remove-Item -Recurse -Force '__WORKSPACE_ROOT__\\scratch' -ErrorAction SilentlyContinue",
+            "shell": "powershell",
+            "timeout": 10,
+            "statusMessage": "Убираю временные файлы..."
+          }
+        ]
+      }
+    ]
+  }
+}
